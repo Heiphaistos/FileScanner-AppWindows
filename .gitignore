@@ -1,0 +1,55 @@
+# === SECRETS & KEYS ===
+.env
+.env.*
+!.env.example
+secrets.json
+secrets.toml
+config.secret.*
+api_keys.*
+virustotal.key
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+
+# === BUILD ARTIFACTS ===
+dist/
+build/
+target/
+src-tauri/target/
+
+# === NODE ===
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# === LOGS ===
+.logs/
+*.log
+logs/
+
+# === OS ===
+Thumbs.db
+Desktop.ini
+.DS_Store
+desktop.ini
+ehthumbs.db
+
+# === IDE ===
+.vscode/
+.idea/
+*.suo
+*.user
+*.userprefs
+*.vsix
+
+# === CLAMAV DB (téléchargés à runtime, non committés) ===
+clamav-*/
+*.cvd
+*.cld
+
+# === PORTABLE ZIP / RELEASE ===
+*.zip
+*.7z

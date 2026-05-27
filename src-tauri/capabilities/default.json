@@ -1,0 +1,11 @@
+{
+  "identifier": "default",
+  "description": "Permissions FileScanner",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "shell:allow-open"
+  ]
+}
