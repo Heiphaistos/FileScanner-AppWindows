@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useScanStore } from '../stores/scan'
+import QuarantineButton from './QuarantineButton.vue'
 
 const store = useScanStore()
 const result = computed(() => store.result)
@@ -67,6 +68,9 @@ const scoreClass = computed(() => {
       <span class="section-title">Analyse IA locale</span>
       <p>{{ result.ai_verdict }}</p>
     </div>
+
+    <!-- Feature B — Bouton quarantaine visible uniquement si verdict Malicious -->
+    <QuarantineButton v-if="result.verdict === 'Malicious'" />
   </div>
 </template>
 

@@ -44,6 +44,14 @@ export const useScanStore = defineStore('scan', {
   },
 
   actions: {
+    /**
+     * H3 — Efface la clé API VT de la mémoire RAM du store après usage.
+     * La clé reste dans le keyring OS mais ne stagne plus en clair dans le heap JS.
+     */
+    clearSensitive() {
+      this.settings = { ...this.settings, vt_api_key: '' }
+    },
+
     async scanFile(filePath: string) {
       this.scanning = true
       this.error = null
@@ -58,6 +66,8 @@ export const useScanStore = defineStore('scan', {
         this.phase = 'error'
       } finally {
         this.scanning = false
+        // H3 — Purge la clé API de la RAM après chaque scan
+        this.clearSensitive()
       }
     },
 

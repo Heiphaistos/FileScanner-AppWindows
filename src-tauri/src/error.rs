@@ -17,6 +17,10 @@ pub enum ScanError {
     #[error("Clé API VirusTotal manquante ou invalide")]
     MissingApiKey,
 
+    /// H2 — Quota VirusTotal dépassé (HTTP 429).
+    #[error("Quota VirusTotal dépassé (429) — réessayer plus tard")]
+    RateLimited,
+
     #[error("Erreur stockage sécurisé : {0}")]
     KeyringError(String),
 

@@ -1,6 +1,16 @@
 use crate::error::ScanError;
 use crate::report::types::{ScanResult, Verdict};
 
+/// M2 — Échappe les caractères HTML spéciaux pour prévenir toute injection XSS
+/// dans les rapports HTML générés.
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
+}
+
 pub fn export_json(result: &ScanResult, output_path: &str) -> Result<(), ScanError> {
     let json = serde_json::to_string_pretty(result)
         .map_err(|e| ScanError::ExportError(e.to_string()))?;
@@ -158,7 +168,9 @@ pub fn export_html(result: &ScanResult, output_path: &str) -> Result<(), ScanErr
             .map(|m| {
                 format!(
                     "<tr><td>{:?}</td><td>{}</td><td>{}</td></tr>",
-                    m.severity, m.rule_name, m.description
+                    m.severity,
+                    html_escape(&m.rule_name),
+                    html_escape(&m.description)
                 )
             })
             .collect();
@@ -178,7 +190,10 @@ pub fn export_html(result: &ScanResult, output_path: &str) -> Result<(), ScanErr
             .map(|ioc| {
                 format!(
                     "<tr><td>{}</td><td><code>{}</code></td><td>{:?}</td><td>{}</td></tr>",
-                    ioc.ioc_type, ioc.value, ioc.severity, ioc.description
+                    html_escape(&ioc.ioc_type),
+                    html_escape(&ioc.value),
+                    ioc.severity,
+                    html_escape(&ioc.description)
                 )
             })
             .collect();
@@ -194,7 +209,7 @@ pub fn export_html(result: &ScanResult, output_path: &str) -> Result<(), ScanErr
     let ai_block = if let Some(ai) = &result.ai_verdict {
         format!(
             r#"<div class="section"><h2>Analyse IA locale</h2><p class="ai-verdict">{}</p></div>"#,
-            ai
+            html_escape(ai)
         )
     } else {
         String::new()
@@ -240,12 +255,12 @@ pub fn export_html(result: &ScanResult, output_path: &str) -> Result<(), ScanErr
         verdict_color,
         result.verdict,
         result.verdict_score,
-        result.file_name,
+        html_escape(&result.file_name),
         result.file_size,
-        result.mime_type,
-        result.hashes.md5,
-        result.hashes.sha256,
-        result.scanned_at,
+        html_escape(&result.mime_type),
+        html_escape(&result.hashes.md5),
+        html_escape(&result.hashes.sha256),
+        html_escape(&result.scanned_at),
         vt_block,
         yara_block,
         ioc_block,

@@ -137,6 +137,18 @@ impl ClamavDb {
     }
 
     fn parse_cvd(&mut self, path: &Path) -> Result<(), ScanError> {
+        // M1 — Anti-bomb : refuse les fichiers CVD > 500 MB
+        const MAX_CVD_SIZE: u64 = 500 * 1024 * 1024;
+        let file_size = std::fs::metadata(path)?.len();
+        if file_size > MAX_CVD_SIZE {
+            log::warn!(
+                "CVD ignoré (trop volumineux : {} Mo > 500 Mo) : {}",
+                file_size / 1_048_576,
+                path.display()
+            );
+            return Ok(());
+        }
+
         let file = std::fs::File::open(path)?;
         let mut reader = BufReader::new(file);
 

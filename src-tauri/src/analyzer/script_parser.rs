@@ -1,6 +1,16 @@
 use std::path::Path;
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 use crate::report::types::{IoC, ScriptInfo, ScriptMatchedLine, Severity};
+
+// H1 — Pré-compilation des regexes au premier accès (évite les panics à l'exécution).
+static RE_BASE64: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[A-Za-z0-9+/]{64,}={0,2}").unwrap());
+
+static RE_CONCAT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"['"][^'"]{1,3}['"]\s*\+\s*['"]"#).unwrap());
 
 const DANGEROUS_CALLS: &[(&str, &str, Severity)] = &[
     ("Invoke-Expression", "Exécution de code dynamique PowerShell", Severity::High),
@@ -107,16 +117,14 @@ fn detect_script_type(path: &Path) -> String {
 }
 
 fn count_base64_blobs(content: &str) -> usize {
-    let base64_re = regex::Regex::new(r"[A-Za-z0-9+/]{64,}={0,2}").expect("regex valide");
-    base64_re
+    RE_BASE64
         .find_iter(content)
         .filter(|m| m.len() >= BASE64_MIN_LENGTH)
         .count()
 }
 
 fn get_base64_samples(content: &str) -> Vec<String> {
-    let base64_re = regex::Regex::new(r"[A-Za-z0-9+/]{64,}={0,2}").expect("regex valide");
-    base64_re
+    RE_BASE64
         .find_iter(content)
         .filter(|m| m.len() >= BASE64_MIN_LENGTH)
         .take(5)
@@ -135,10 +143,8 @@ fn detect_obfuscation(content: &str) -> bool {
     let caret_density = content.chars().filter(|&c| c == '^').count() as f64
         / content.len().max(1) as f64;
 
-    let concat_ps = content.contains("` ") || content.contains("`\"") || {
-        let re = regex::Regex::new(r#"['"][^'"]{1,3}['"]\s*\+\s*['"]"#).expect("regex valide");
-        re.is_match(content)
-    };
+    let concat_ps =
+        content.contains("` ") || content.contains("`\"") || RE_CONCAT.is_match(content);
 
     caret_density > 0.05 || concat_ps
 }
