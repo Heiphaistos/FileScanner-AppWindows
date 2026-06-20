@@ -46,6 +46,10 @@ flate2 = "1"
 tar = "0.4"
 dirs = "5"
 
+# AES-256-GCM quarantine encryption (FIX C13)
+aes-gcm = "0.10"
+rand = "0.8"
+
 # Logging
 log = "0.4"
 

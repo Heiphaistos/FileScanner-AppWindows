@@ -52,7 +52,7 @@ fn validate_scan_path(raw: &str) -> Result<PathBuf, ScanError> {
     if size > MAX_FILE_SIZE {
         return Err(ScanError::Internal(format!(
             "Fichier trop volumineux ({} Go > 2 Go max)",
-            size / 1_073_741_824
+            size.checked_div(1_073_741_824).unwrap_or(0)
         )));
     }
 

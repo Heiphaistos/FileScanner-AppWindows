@@ -3,18 +3,23 @@
 /// Protocole :
 /// 1. Valide le chemin source
 /// 2. Lit le fichier en bytes
-/// 3. XOR chaque byte avec 0xAB (neutralise l'exécution accidentelle)
+/// 3. Chiffre avec AES-256-GCM (clé persistée dans le dossier quarantaine)
 /// 4. Écrit le fichier chiffré dans %APPDATA%\FileScanner\quarantine\{sha256}.quar
+///    Format : [12 bytes nonce][ciphertext + 16 bytes auth tag]
 /// 5. Écrit les métadonnées dans %APPDATA%\FileScanner\quarantine\{sha256}.meta.json
 /// 6. Supprime le fichier original
 use std::path::{Path, PathBuf};
 
+use aes_gcm::{
+    aead::{Aead, AeadCore, KeyInit, OsRng},
+    Aes256Gcm, Key,
+};
 use chrono::Utc;
 use serde::Serialize;
 
 use crate::error::ScanError;
 
-const XOR_KEY: u8 = 0xAB;
+const QUARANTINE_KEY_FILE: &str = "quarantine.key";
 
 #[derive(Serialize)]
 struct QuarantineMeta {
@@ -22,7 +27,7 @@ struct QuarantineMeta {
     sha256: String,
     quarantine_date: String,
     size_bytes: u64,
-    xor_key: u8,
+    encryption: String,
 }
 
 /// Répertoire de quarantaine : %APPDATA%\FileScanner\quarantine\
@@ -31,6 +36,36 @@ fn quarantine_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
         .join("FileScanner")
         .join("quarantine")
+}
+
+/// Charge ou génère la clé AES-256 persistée sur disque.
+fn get_or_create_key(qdir: &Path) -> Result<[u8; 32], String> {
+    let key_path = qdir.join(QUARANTINE_KEY_FILE);
+    if key_path.exists() {
+        let bytes = std::fs::read(&key_path).map_err(|e| e.to_string())?;
+        if bytes.len() < 32 {
+            return Err("Fichier clé corrompu (< 32 bytes)".to_string());
+        }
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&bytes[..32]);
+        Ok(key)
+    } else {
+        let key = Aes256Gcm::generate_key(OsRng);
+        std::fs::write(&key_path, key.as_slice()).map_err(|e| e.to_string())?;
+        Ok(key.into())
+    }
+}
+
+/// Chiffre `data` avec AES-256-GCM. Retourne [nonce (12 B)] + [ciphertext + tag].
+fn encrypt_quarantine(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let ciphertext = cipher
+        .encrypt(&nonce, data)
+        .map_err(|e| format!("AES-GCM encrypt error: {e:?}"))?;
+    let mut result = nonce.to_vec(); // 12 bytes
+    result.extend_from_slice(&ciphertext); // ciphertext + 16 bytes GCM tag
+    Ok(result)
 }
 
 /// Valide le chemin source (réutilise la même logique que commands.rs).
@@ -64,13 +99,16 @@ pub async fn quarantine_file(file_path: String, sha256: String) -> Result<String
         .map_err(|e| e.to_string())?
         .len();
 
-    // Lire et XOR-chiffrer les bytes
-    let raw = std::fs::read(&source).map_err(|e| e.to_string())?;
-    let encrypted: Vec<u8> = raw.iter().map(|b| b ^ XOR_KEY).collect();
-
     // Créer le répertoire de quarantaine
     let qdir = quarantine_dir();
     std::fs::create_dir_all(&qdir).map_err(|e| e.to_string())?;
+
+    // FIX C13 — Charger/créer la clé AES-256-GCM
+    let key = get_or_create_key(&qdir).map_err(|e| e.to_string())?;
+
+    // Lire et chiffrer avec AES-256-GCM
+    let raw = std::fs::read(&source).map_err(|e| e.to_string())?;
+    let encrypted = encrypt_quarantine(&raw, &key).map_err(|e| e.to_string())?;
 
     let quar_path = qdir.join(format!("{}.quar", sha256));
     let meta_path = qdir.join(format!("{}.meta.json", sha256));
@@ -84,7 +122,7 @@ pub async fn quarantine_file(file_path: String, sha256: String) -> Result<String
         sha256: sha256.clone(),
         quarantine_date: Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
         size_bytes,
-        xor_key: XOR_KEY,
+        encryption: "AES-256-GCM".to_string(),
     };
     let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
     std::fs::write(&meta_path, meta_json).map_err(|e| e.to_string())?;
@@ -93,7 +131,7 @@ pub async fn quarantine_file(file_path: String, sha256: String) -> Result<String
     std::fs::remove_file(&source).map_err(|e| e.to_string())?;
 
     log::info!(
-        "Fichier mis en quarantaine : {} → {}",
+        "Fichier mis en quarantaine (AES-256-GCM) : {} → {}",
         source.display(),
         quar_path.display()
     );

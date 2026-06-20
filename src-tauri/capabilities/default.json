@@ -5,7 +5,6 @@
   "permissions": [
     "core:default",
     "dialog:allow-open",
-    "dialog:allow-save",
-    "shell:allow-open"
+    "dialog:allow-save"
   ]
 }
