@@ -59,7 +59,13 @@ fn validate_scan_path(raw: &str) -> Result<PathBuf, ScanError> {
     Ok(canonical)
 }
 
-/// Valide un chemin de destination d'export (pas de path traversal, dossier parent doit exister).
+/// Valide un chemin de destination d'export.
+///
+/// Sécurité :
+/// - Refuse les séquences `..` (path traversal)
+/// - Canonicalise le dossier parent pour résoudre les symlinks
+/// - Restreint l'export au répertoire utilisateur (évite d'écrire dans System32 etc.)
+/// - Whitelist d'extensions autorisées (évite d'écraser un .exe/.bat)
 fn validate_export_path(raw: &str) -> Result<PathBuf, ScanError> {
     if raw.contains("..") {
         return Err(ScanError::ExportError(
@@ -69,17 +75,49 @@ fn validate_export_path(raw: &str) -> Result<PathBuf, ScanError> {
 
     let path = PathBuf::from(raw);
 
-    // Le dossier parent doit exister
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            return Err(ScanError::ExportError(format!(
+    // Le dossier parent doit exister et être canonicalisable
+    let canonical_parent = if let Some(parent) = path.parent() {
+        parent
+            .canonicalize()
+            .map_err(|_| ScanError::ExportError(format!(
                 "Dossier de destination inexistant : {}",
                 parent.display()
-            )));
-        }
+            )))?
+    } else {
+        return Err(ScanError::ExportError("Chemin invalide : pas de dossier parent".to_string()));
+    };
+
+    // Restreint au répertoire home de l'utilisateur
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .map(std::path::PathBuf::from)
+        .map_err(|_| ScanError::ExportError("Impossible de déterminer le répertoire home".to_string()))?;
+
+    if !canonical_parent.starts_with(&home) {
+        return Err(ScanError::ExportError(
+            "Le chemin d'export doit être dans le répertoire utilisateur".to_string(),
+        ));
     }
 
-    Ok(path)
+    // Whitelist des extensions autorisées pour l'export
+    let allowed_exts = ["json", "txt", "md", "html", "pdf"];
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    if !allowed_exts.contains(&ext) {
+        return Err(ScanError::ExportError(format!(
+            "Extension .{} non autorisée pour l'export (autorisées : json, txt, md, html, pdf)",
+            ext
+        )));
+    }
+
+    // Reconstruit le chemin canonicalisé : parent canonicalisé + nom de fichier
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| ScanError::ExportError("Nom de fichier manquant".to_string()))?;
+
+    Ok(canonical_parent.join(file_name))
 }
 
 #[tauri::command]
@@ -112,6 +150,17 @@ pub async fn get_settings() -> Result<AppSettings, String> {
 
 #[tauri::command]
 pub async fn save_settings(app_settings: AppSettings) -> Result<(), String> {
+    // Validation des champs sensibles avant persistance dans le keystore
+    if app_settings.vt_api_key.len() > 256 {
+        return Err("Clé API VirusTotal trop longue (max 256 caractères)".to_string());
+    }
+    if app_settings.clamav_db_path.len() > 4096 {
+        return Err("Chemin ClamAV trop long (max 4096 caractères)".to_string());
+    }
+    // Valider que le chemin ClamAV ne contient pas de séquences ..
+    if app_settings.clamav_db_path.contains("..") {
+        return Err("Chemin ClamAV invalide : séquence '..' interdite".to_string());
+    }
     settings::save(&app_settings).map_err(|e| e.to_string())
 }
 
@@ -129,6 +178,12 @@ pub async fn export_report(
 
 #[tauri::command]
 pub async fn test_vt_key(api_key: String) -> Result<String, String> {
+    if api_key.is_empty() {
+        return Err("Clé API vide".to_string());
+    }
+    if api_key.len() > 256 {
+        return Err("Clé API trop longue (max 256 caractères)".to_string());
+    }
     crate::api::virustotal::test_key(&api_key)
         .await
         .map_err(|e| e.to_string())

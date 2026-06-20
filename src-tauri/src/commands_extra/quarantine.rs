@@ -9,6 +9,8 @@
 /// 5. Écrit les métadonnées dans %APPDATA%\FileScanner\quarantine\{sha256}.meta.json
 /// 6. Supprime le fichier original
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
@@ -39,6 +41,11 @@ fn quarantine_dir() -> PathBuf {
 }
 
 /// Charge ou génère la clé AES-256 persistée sur disque.
+///
+/// Sécurité : la clé est stockée dans %APPDATA%\FileScanner\quarantine\quarantine.key.
+/// Après création, on restreint les permissions via icacls pour que seul l'utilisateur
+/// courant puisse lire le fichier (évite la lecture par d'autres processus locaux).
+/// Note : pour un niveau de sécurité supérieur, envisager DPAPI (Windows CryptProtectData).
 fn get_or_create_key(qdir: &Path) -> Result<[u8; 32], String> {
     let key_path = qdir.join(QUARANTINE_KEY_FILE);
     if key_path.exists() {
@@ -52,6 +59,26 @@ fn get_or_create_key(qdir: &Path) -> Result<[u8; 32], String> {
     } else {
         let key = Aes256Gcm::generate_key(OsRng);
         std::fs::write(&key_path, key.as_slice()).map_err(|e| e.to_string())?;
+
+        // Restreindre l'accès : seul l'utilisateur courant (pas Everyone, pas les autres users)
+        // icacls <path> /inheritance:r /grant:r %USERNAME%:(R) — sans input utilisateur (safe)
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(username) = std::env::var("USERNAME") {
+                let key_str = key_path.to_string_lossy().to_string();
+                // Désactiver l'héritage et ne garder que le propriétaire en lecture
+                let _ = std::process::Command::new("icacls")
+                    .args([
+                        &key_str,
+                        "/inheritance:r",
+                        "/grant:r",
+                        &format!("{}:(R)", username),
+                    ])
+                    .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                    .output();
+            }
+        }
+
         Ok(key.into())
     }
 }
