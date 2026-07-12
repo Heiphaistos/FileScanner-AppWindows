@@ -497,6 +497,22 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: false,
         },
+        // ── RATs additionnels (familles commerciales/crimeware) ───────────────
+        Rule {
+            name: "RAT_Families_2",
+            description: "RATs additionnels (Warzone/Ave Maria, NetWire, Orcus, VenomRAT, XWorm, DarkComet)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("warzone rat"),
+                Pattern::StringInsensitive("ave_maria"),
+                Pattern::StringInsensitive("netwire"),
+                Pattern::StringInsensitive("orcus rat"),
+                Pattern::StringInsensitive("venomrat"),
+                Pattern::StringInsensitive("xworm"),
+                Pattern::StringInsensitive("darkcomet"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
