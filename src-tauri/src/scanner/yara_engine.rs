@@ -361,6 +361,21 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: false,
         },
+        // ── APT / implants ciblés ─────────────────────────────────────────────
+        Rule {
+            name: "APT_Implant_Families",
+            description: "Implants APT connus (PlugX, Winnti, ShadowPad, Sakula, Gh0st RAT)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("plugx"),
+                Pattern::StringInsensitive("winnti"),
+                Pattern::StringInsensitive("shadowpad"),
+                Pattern::StringInsensitive("sakula"),
+                Pattern::StringInsensitive("gh0st rat"),
+                Pattern::StringInsensitive("poisonivy"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
