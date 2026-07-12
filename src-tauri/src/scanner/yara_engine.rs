@@ -482,6 +482,21 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: false,
         },
+        // ── Frameworks C2 / post-exploitation additionnels ────────────────────
+        Rule {
+            name: "C2_PostEx_Frameworks",
+            description: "Frameworks C2 / post-exploitation (PoshC2, Covenant, Empire, Merlin, Villain)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("poshc2"),
+                Pattern::StringInsensitive("covenant grunt"),
+                Pattern::StringInsensitive("empire agent"),
+                Pattern::StringInsensitive("merlin agent"),
+                Pattern::StringInsensitive("villain c2"),
+                Pattern::StringInsensitive("posh_v4"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
