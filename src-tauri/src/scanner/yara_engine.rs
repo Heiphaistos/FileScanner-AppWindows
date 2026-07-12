@@ -13,7 +13,7 @@ enum Pattern {
     StringInsensitive(&'static str),
 }
 
-fn match_pattern_desc(data: &[u8], pattern: &Pattern) -> Option<String> {
+fn match_pattern_desc(data: &[u8], lower_data: &[u8], pattern: &Pattern) -> Option<String> {
     match pattern {
         Pattern::Bytes(needle) => {
             if data.windows(needle.len()).any(|w| w == *needle) {
@@ -31,7 +31,6 @@ fn match_pattern_desc(data: &[u8], pattern: &Pattern) -> Option<String> {
             }
         }
         Pattern::StringInsensitive(s) => {
-            let lower_data: Vec<u8> = data.iter().map(|b| b.to_ascii_lowercase()).collect();
             let needle = s.to_lowercase();
             if lower_data.windows(needle.len()).any(|w| w == needle.as_bytes()) {
                 Some(format!("\"{}\"", s))
@@ -181,6 +180,171 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: true,
         },
+        // ── Ransomware — familles modernes ────────────────────────────────────
+        Rule {
+            name: "Ransomware_Modern_Families",
+            description: "Noms de familles ransomware connues (LockBit, Conti, BlackCat, REvil…)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("lockbit"),
+                Pattern::StringInsensitive("blackcat"),
+                Pattern::StringInsensitive("alphv"),
+                Pattern::StringInsensitive("revil"),
+                Pattern::StringInsensitive("ryuk ransomware"),
+                Pattern::StringInsensitive("hive ransomware"),
+                Pattern::StringInsensitive("blackbasta"),
+            ],
+            require_all: false,
+        },
+        Rule {
+            name: "Ransomware_Extensions",
+            description: "Extensions de chiffrement ransomware spécifiques",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive(".lockbit"),
+                Pattern::StringInsensitive(".conti"),
+                Pattern::StringInsensitive(".ryk"),
+                Pattern::StringInsensitive(".blackcat"),
+            ],
+            require_all: false,
+        },
+        // ── Stealers ──────────────────────────────────────────────────────────
+        Rule {
+            name: "Stealer_Modern_Families",
+            description: "Infostealers connus (RedLine, Raccoon, Vidar, Lumma, AgentTesla, FormBook)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("redline stealer"),
+                Pattern::StringInsensitive("raccoon stealer"),
+                Pattern::StringInsensitive("vidar"),
+                Pattern::StringInsensitive("lumma"),
+                Pattern::StringInsensitive("agenttesla"),
+                Pattern::StringInsensitive("formbook"),
+                Pattern::StringInsensitive("redlinestealer"),
+            ],
+            require_all: false,
+        },
+        Rule {
+            name: "Discord_Webhook_Exfil",
+            description: "Exfiltration via webhook Discord (vol de données)",
+            severity: Severity::High,
+            patterns: vec![
+                Pattern::StringInsensitive("discord.com/api/webhooks/"),
+                Pattern::StringInsensitive("discordapp.com/api/webhooks/"),
+            ],
+            require_all: false,
+        },
+        // ── Injection / évasion (parité avec version web) ─────────────────────
+        Rule {
+            name: "Process_Hollowing",
+            description: "Process hollowing (NtUnmapViewOfSection + ResumeThread)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("ntunmapviewofsection"),
+                Pattern::StringInsensitive("resumethread"),
+            ],
+            require_all: true,
+        },
+        Rule {
+            name: "AMSI_Bypass",
+            description: "Bypass AMSI (antimalware scan interface)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("amsiutils"),
+                Pattern::StringInsensitive("amsiinitfailed"),
+                Pattern::StringInsensitive("amsiscanbuffer"),
+            ],
+            require_all: false,
+        },
+        Rule {
+            name: "Defender_Tampering",
+            description: "Désactivation de Windows Defender",
+            severity: Severity::Critical,
+            patterns: vec![Pattern::StringInsensitive("set-mppreference -disablerealtimemonitoring")],
+            require_all: false,
+        },
+        Rule {
+            name: "PHP_Webshell",
+            description: "Webshell PHP (eval + entrée utilisateur)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("eval($_post"),
+                Pattern::StringInsensitive("eval($_get"),
+                Pattern::StringInsensitive("eval(base64_decode"),
+            ],
+            require_all: false,
+        },
+        Rule {
+            name: "Bash_Reverse_Shell",
+            description: "Reverse shell bash (/dev/tcp)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("/dev/tcp/"),
+                Pattern::StringInsensitive("bash -i"),
+            ],
+            require_all: true,
+        },
+        Rule {
+            name: "CobaltStrike_Beacon",
+            description: "Signatures Cobalt Strike Beacon",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("beacon.dll"),
+                Pattern::StringInsensitive("reflectiveloader@4"),
+            ],
+            require_all: false,
+        },
+        Rule {
+            name: "Common_RAT_Strings",
+            description: "Signatures de RATs courants (njRAT, AsyncRAT, QuasarRAT, Remcos)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("njrat"),
+                Pattern::StringInsensitive("asyncrat"),
+                Pattern::StringInsensitive("quasar.client"),
+                Pattern::StringInsensitive("remcos"),
+                Pattern::StringInsensitive("nanocore"),
+            ],
+            require_all: false,
+        },
+        Rule {
+            name: "CryptoMiner_Strings",
+            description: "Mineur de cryptomonnaie embarqué",
+            severity: Severity::High,
+            patterns: vec![
+                Pattern::StringInsensitive("stratum+tcp://"),
+                Pattern::StringInsensitive("xmrig"),
+                Pattern::StringInsensitive("cryptonight"),
+                Pattern::StringInsensitive("--donate-level"),
+            ],
+            require_all: false,
+        },
+        // ── UAC bypass ────────────────────────────────────────────────────────
+        Rule {
+            name: "UAC_Bypass_Techniques",
+            description: "Bypass UAC connu (fodhelper, eventvwr, sdclt, computerdefaults, silentcleanup)",
+            severity: Severity::High,
+            patterns: vec![
+                Pattern::StringInsensitive("fodhelper.exe"),
+                Pattern::StringInsensitive("computerdefaults.exe"),
+                Pattern::StringInsensitive("sdclt.exe"),
+                Pattern::StringInsensitive("silentcleanup"),
+            ],
+            require_all: false,
+        },
+        // ── Macros Office ─────────────────────────────────────────────────────
+        Rule {
+            name: "Office_Macro_AutoExec",
+            description: "Macro Office à exécution automatique (AutoOpen, Workbook_Open)",
+            severity: Severity::High,
+            patterns: vec![
+                Pattern::StringInsensitive("autoopen"),
+                Pattern::StringInsensitive("auto_open"),
+                Pattern::StringInsensitive("workbook_open"),
+                Pattern::StringInsensitive("document_open"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
@@ -196,13 +360,16 @@ impl YaraEngine {
     }
 
     pub fn scan(&self, data: &[u8]) -> Vec<YaraMatch> {
+        // Pré-calcul lowercase une seule fois (vs 1x par pattern auparavant)
+        let lower_data: Vec<u8> = data.iter().map(|b| b.to_ascii_lowercase()).collect();
+
         let mut matches = Vec::new();
 
         for rule in &self.rules {
             let matched_strings: Vec<String> = rule
                 .patterns
                 .iter()
-                .filter_map(|p| match_pattern_desc(data, p))
+                .filter_map(|p| match_pattern_desc(data, &lower_data, p))
                 .collect();
 
             let triggered = if rule.require_all {
