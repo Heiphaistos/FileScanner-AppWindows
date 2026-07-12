@@ -513,6 +513,21 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: false,
         },
+        // ── Wipers (destruction de données) ───────────────────────────────────
+        Rule {
+            name: "Wiper_Families",
+            description: "Malwares destructifs (WhisperGate, HermeticWiper, CaddyWiper, KillDisk, Shamoon)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("whispergate"),
+                Pattern::StringInsensitive("hermeticwiper"),
+                Pattern::StringInsensitive("caddywiper"),
+                Pattern::StringInsensitive("killdisk"),
+                Pattern::StringInsensitive("shamoon"),
+                Pattern::StringInsensitive("isaacwiper"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
