@@ -528,6 +528,21 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: false,
         },
+        // ── Stealers modernes (crimeware 2023+) ───────────────────────────────
+        Rule {
+            name: "Stealer_Families_3",
+            description: "Infostealers récents (Rhadamanthys, StealC, Meduza, RisePro, Atomic/AMOS)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("rhadamanthys"),
+                Pattern::StringInsensitive("stealc"),
+                Pattern::StringInsensitive("meduza stealer"),
+                Pattern::StringInsensitive("risepro"),
+                Pattern::StringInsensitive("atomic stealer"),
+                Pattern::StringInsensitive("amos stealer"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
