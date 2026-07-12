@@ -467,6 +467,21 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: false,
         },
+        // ── Mineurs GPU (extension cryptominer) ───────────────────────────────
+        Rule {
+            name: "GPU_Miner_Binaries",
+            description: "Mineurs GPU connus (NBMiner, PhoenixMiner, lolMiner, T-Rex, GMiner, TeamRedMiner)",
+            severity: Severity::High,
+            patterns: vec![
+                Pattern::StringInsensitive("nbminer"),
+                Pattern::StringInsensitive("phoenixminer"),
+                Pattern::StringInsensitive("lolminer"),
+                Pattern::StringInsensitive("t-rex miner"),
+                Pattern::StringInsensitive("gminer"),
+                Pattern::StringInsensitive("teamredminer"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
