@@ -423,6 +423,20 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: false,
         },
+        // ── Loaders/droppers additionnels ─────────────────────────────────────
+        Rule {
+            name: "Loader_Families_2",
+            description: "Loaders récents (GuLoader, SmokeLoader, DBatLoader, PrivateLoader)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("guloader"),
+                Pattern::StringInsensitive("smokeloader"),
+                Pattern::StringInsensitive("dbatloader"),
+                Pattern::StringInsensitive("privateloader"),
+                Pattern::StringInsensitive("modiloader"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
