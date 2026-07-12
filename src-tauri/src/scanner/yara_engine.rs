@@ -376,6 +376,26 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: false,
         },
+        // ── Macro Excel 4.0 (XLM) ─────────────────────────────────────────────
+        Rule {
+            name: "Office_XLM4_Macro",
+            description: "Macro Excel 4.0 (XLM) à primitives d'exécution (=EXEC/=CALL/=REGISTER)",
+            severity: Severity::High,
+            patterns: vec![
+                Pattern::StringInsensitive("=exec("),
+                Pattern::StringInsensitive("=call("),
+                Pattern::StringInsensitive("=register("),
+            ],
+            require_all: false,
+        },
+        // ── HTA embarqué ──────────────────────────────────────────────────────
+        Rule {
+            name: "HTA_Application",
+            description: "Application HTA (HTML Application) — vecteur d'exécution de script",
+            severity: Severity::High,
+            patterns: vec![Pattern::StringInsensitive("<hta:application")],
+            require_all: false,
+        },
     ]
 }
 
