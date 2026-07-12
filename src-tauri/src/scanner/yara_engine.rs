@@ -396,6 +396,20 @@ fn build_rules() -> Vec<Rule> {
             patterns: vec![Pattern::StringInsensitive("<hta:application")],
             require_all: false,
         },
+        // ── Credential dumping LSASS ──────────────────────────────────────────
+        Rule {
+            name: "LSASS_Credential_Dumping",
+            description: "Outils de dump LSASS sans ambiguïté (nanodump, dumpert, SafetyKatz, sekurlsa::minidump)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("nanodump"),
+                Pattern::StringInsensitive("dumpert"),
+                Pattern::StringInsensitive("safetykatz"),
+                Pattern::StringInsensitive("sekurlsa::minidump"),
+                Pattern::StringInsensitive("lsass.dmp"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
