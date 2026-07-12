@@ -452,6 +452,21 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: false,
         },
+        // ── Outils d'attaque Active Directory ─────────────────────────────────
+        Rule {
+            name: "AD_Attack_Tools",
+            description: "Outils offensifs Active Directory (Rubeus, Kerberoast, SharpHound, Certify)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("rubeus"),
+                Pattern::StringInsensitive("kerberoast"),
+                Pattern::StringInsensitive("asreproast"),
+                Pattern::StringInsensitive("sharphound"),
+                Pattern::StringInsensitive("certify.exe"),
+                Pattern::StringInsensitive("getuserspns"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
