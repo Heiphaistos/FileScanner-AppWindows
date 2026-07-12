@@ -437,6 +437,21 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: false,
         },
+        // ── Mouvement latéral (outils Impacket) ───────────────────────────────
+        Rule {
+            name: "Impacket_Lateral_Movement",
+            description: "Outils Impacket d'exécution distante (wmiexec, smbexec, psexec.py, atexec, dcomexec)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("wmiexec"),
+                Pattern::StringInsensitive("smbexec"),
+                Pattern::StringInsensitive("psexec.py"),
+                Pattern::StringInsensitive("atexec"),
+                Pattern::StringInsensitive("dcomexec"),
+                Pattern::StringInsensitive("secretsdump"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
