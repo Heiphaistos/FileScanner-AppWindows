@@ -345,6 +345,22 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: false,
         },
+        // ── Loaders / droppers connus ─────────────────────────────────────────
+        Rule {
+            name: "Malware_Loader_Families",
+            description: "Loaders/droppers connus (Emotet, QakBot, IcedID, Bumblebee, Gozi)",
+            severity: Severity::Critical,
+            patterns: vec![
+                Pattern::StringInsensitive("emotet"),
+                Pattern::StringInsensitive("qakbot"),
+                Pattern::StringInsensitive("qbot"),
+                Pattern::StringInsensitive("icedid"),
+                Pattern::StringInsensitive("bumblebee loader"),
+                Pattern::StringInsensitive("gozi"),
+                Pattern::StringInsensitive("bazarloader"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
