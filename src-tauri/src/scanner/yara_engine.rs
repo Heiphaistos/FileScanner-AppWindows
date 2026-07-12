@@ -410,6 +410,19 @@ fn build_rules() -> Vec<Rule> {
             ],
             require_all: false,
         },
+        // ── Packers additionnels (sections PE) ────────────────────────────────
+        Rule {
+            name: "Additional_Packers",
+            description: "Packers/protecteurs additionnels (Themida, Enigma, Obsidium)",
+            severity: Severity::Medium,
+            patterns: vec![
+                Pattern::Bytes(b".themida"),
+                Pattern::Bytes(b".enigma1"),
+                Pattern::Bytes(b".enigma2"),
+                Pattern::Bytes(b"Obsidium"),
+            ],
+            require_all: false,
+        },
     ]
 }
 
