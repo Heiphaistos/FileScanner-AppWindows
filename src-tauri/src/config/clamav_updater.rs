@@ -13,7 +13,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ScanError;
 
-const CDN_BASE: &str = "https://database.clamav.net";
+// Miroir officiel Microsoft : database.clamav.net renvoie 403 (CloudFlare bot
+// management) aux clients non-freshclam, dont notre user-agent custom.
+const CDN_BASE: &str = "https://packages.microsoft.com/clamav";
 const DATABASES: &[(&str, &str)] = &[
     ("main.cvd", "Base principale ClamAV"),
     ("daily.cvd", "Mise à jour quotidienne"),
@@ -74,7 +76,16 @@ pub async fn download_databases(db_dir: &Path) -> Result<Vec<String>, ScanError>
 }
 
 /// Détecte si ClamAV est installé localement et retourne le chemin de sa DB.
+/// Priorité au dossier `clamav_db` à côté de l'exe (mode portable, bases embarquées).
 pub fn detect_local_clamav() -> Option<PathBuf> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let portable = dir.join("clamav_db");
+            if portable.exists() && has_cvd_files(&portable) {
+                return Some(portable);
+            }
+        }
+    }
     let candidates = &[
         r"C:\ProgramData\ClamAV",
         r"C:\Program Files\ClamAV\db",
