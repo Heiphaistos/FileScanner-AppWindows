@@ -20,7 +20,7 @@ pub struct UpdateEvent {
 
 /// Lance le worker en arrière-plan (appelé depuis lib.rs `setup()`).
 pub fn start(app: AppHandle) {
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         run_update_check(app).await;
     });
 }
