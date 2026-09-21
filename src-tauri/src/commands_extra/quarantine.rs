@@ -97,7 +97,7 @@ fn encrypt_quarantine(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
 
 /// Valide le chemin source (réutilise la même logique que commands.rs).
 fn validate_source(raw: &str) -> Result<PathBuf, ScanError> {
-    if raw.contains("..") {
+    if crate::commands::has_parent_dir_segment(raw) {
         return Err(ScanError::Internal(
             "Chemin invalide : séquence '..' interdite".to_string(),
         ));
