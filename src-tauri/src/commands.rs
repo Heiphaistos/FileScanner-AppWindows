@@ -21,6 +21,16 @@ const MAX_FILE_SIZE: u64 = 2 * 1024 * 1024 * 1024;
 /// Timeout global du pipeline de scan : 2 minutes
 const SCAN_TIMEOUT_SECS: u64 = 120;
 
+/// `true` si le chemin contient un vrai segment `..`.
+///
+/// Un simple `raw.contains("..")` refuse aussi des noms de fichiers légitimes
+/// (`rapport_archive..zip.json`), ce qui bloquait l'export sans message clair.
+pub(crate) fn has_parent_dir_segment(raw: &str) -> bool {
+    Path::new(raw)
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+}
+
 /// Valide un chemin entrant avant tout traitement.
 ///
 /// Sécurité :
@@ -29,7 +39,7 @@ const SCAN_TIMEOUT_SECS: u64 = 120;
 /// - Vérifie que la cible est un fichier ordinaire (pas un device, pipe, dir)
 /// - Vérifie la taille ≤ MAX_FILE_SIZE
 fn validate_scan_path(raw: &str) -> Result<PathBuf, ScanError> {
-    if raw.contains("..") {
+    if has_parent_dir_segment(raw) {
         return Err(ScanError::Internal(
             "Chemin invalide : séquence '..' interdite".to_string(),
         ));
@@ -67,7 +77,7 @@ fn validate_scan_path(raw: &str) -> Result<PathBuf, ScanError> {
 /// - Restreint l'export au répertoire utilisateur (évite d'écrire dans System32 etc.)
 /// - Whitelist d'extensions autorisées (évite d'écraser un .exe/.bat)
 fn validate_export_path(raw: &str) -> Result<PathBuf, ScanError> {
-    if raw.contains("..") {
+    if has_parent_dir_segment(raw) {
         return Err(ScanError::ExportError(
             "Chemin invalide : séquence '..' interdite".to_string(),
         ));
@@ -87,11 +97,16 @@ fn validate_export_path(raw: &str) -> Result<PathBuf, ScanError> {
         return Err(ScanError::ExportError("Chemin invalide : pas de dossier parent".to_string()));
     };
 
-    // Restreint au répertoire home de l'utilisateur
+    // Restreint au répertoire home de l'utilisateur.
+    // Le home est canonicalisé lui aussi : sous Windows `canonicalize` renvoie un
+    // chemin verbatim (préfixe `\\?\`) que `USERPROFILE` n'a pas, et `starts_with`
+    // compare les préfixes tels quels — sans ça la comparaison est toujours fausse.
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .map(std::path::PathBuf::from)
-        .map_err(|_| ScanError::ExportError("Impossible de déterminer le répertoire home".to_string()))?;
+        .map_err(|_| ScanError::ExportError("Impossible de déterminer le répertoire home".to_string()))?
+        .canonicalize()
+        .map_err(|e| ScanError::ExportError(format!("Répertoire home invalide: {e}")))?;
 
     if !canonical_parent.starts_with(&home) {
         return Err(ScanError::ExportError(
@@ -158,7 +173,7 @@ pub async fn save_settings(app_settings: AppSettings) -> Result<(), String> {
         return Err("Chemin ClamAV trop long (max 4096 caractères)".to_string());
     }
     // Valider que le chemin ClamAV ne contient pas de séquences ..
-    if app_settings.clamav_db_path.contains("..") {
+    if has_parent_dir_segment(&app_settings.clamav_db_path) {
         return Err("Chemin ClamAV invalide : séquence '..' interdite".to_string());
     }
     settings::save(&app_settings).map_err(|e| e.to_string())
@@ -215,4 +230,42 @@ pub async fn update_clamav_db() -> Result<Vec<String>, String> {
     clamav_updater::download_databases(&db_dir)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Régression : sous Windows `canonicalize` renvoie `\?\C:\...` alors que
+    /// `USERPROFILE` vaut `C:\Users\...`. Comparer les deux sans canonicaliser
+    /// le home rendait `starts_with` toujours faux et bloquait tout export.
+    #[test]
+    fn export_sous_home_est_accepte() {
+        let home = std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
+            .expect("home introuvable");
+        let dir = PathBuf::from(&home).join("filescanner_test_export");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let dest = dir.join("rapport.html");
+        assert!(!dest.exists());
+
+        let out = validate_export_path(dest.to_str().unwrap()).expect("doit être accepté");
+        assert_eq!(out.file_name().unwrap(), "rapport.html");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn export_hors_du_home_est_refuse() {
+        assert!(validate_export_path(r"C:\Windows\System32\rapport.html").is_err());
+    }
+
+    /// Un nom de fichier contenant `..` n'est pas un `..` de chemin :
+    /// le refuser bloquait l'export sans raison.
+    #[test]
+    fn nom_de_fichier_avec_deux_points_nest_pas_un_parent() {
+        assert!(!has_parent_dir_segment(r"C:\Users\x\rapport_archive..zip.json"));
+        assert!(has_parent_dir_segment(r"C:\Users\x\..\Windows\evil.json"));
+    }
 }

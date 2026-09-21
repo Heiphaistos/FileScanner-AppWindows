@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import DropZone from './components/DropZone.vue'
 import VerdictDisplay from './components/VerdictDisplay.vue'
 import IoCTable from './components/IoCTable.vue'
@@ -9,14 +9,33 @@ import SettingsPanel from './components/SettingsPanel.vue'
 import ExportMenu from './components/ExportMenu.vue'
 import ClamavPanel from './components/ClamavPanel.vue'
 import { useScanStore } from './stores/scan'
+import { checkForUpdate } from './composables/useAutoUpdate'
 
 const store = useScanStore()
 const tab = ref<'verdict' | 'ioc' | 'pe' | 'strings'>('verdict')
+
+const majEnCours = ref(false)
 
 function resetScan() {
   store.reset()
   tab.value = 'verdict'
 }
+
+async function verifierMaj() {
+  if (majEnCours.value) return
+  majEnCours.value = true
+  try {
+    await checkForUpdate(false)
+  } finally {
+    majEnCours.value = false
+  }
+}
+
+// Verification silencieuse au demarrage : si le canal est injoignable,
+// l'utilisateur ne voit rien et continue de travailler.
+onMounted(() => {
+  void checkForUpdate()
+})
 </script>
 
 <template>
@@ -38,6 +57,14 @@ function resetScan() {
           ↺ Nouveau scan
         </button>
       </div>
+
+      <button
+        class="btn btn-ghost maj-btn"
+        :disabled="majEnCours"
+        @click="verifierMaj"
+      >
+        {{ majEnCours ? 'Verification…' : '⟳ Verifier les mises a jour' }}
+      </button>
     </aside>
 
     <!-- Main -->
@@ -207,4 +234,13 @@ function resetScan() {
   flex-direction: column;
   gap: 1rem;
 }
+
+/* Colle le bouton en bas de la barre laterale, que le bloc « Nouveau scan »
+   (lui aussi en margin-top:auto) soit present ou non. */
+.maj-btn {
+  width: 100%;
+  margin-top: auto;
+  font-size: 0.78rem;
+}
+.maj-btn:disabled { opacity: 0.5; cursor: default; }
 </style>

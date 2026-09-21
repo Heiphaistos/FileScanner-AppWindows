@@ -1,6 +1,6 @@
 {
   "productName": "FileScanner",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "identifier": "com.filescanner.app",
   "build": {
     "frontendDist": "../dist",
@@ -10,13 +10,21 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "createUpdaterArtifacts": true
   },
   "app": {
     "windows": [
@@ -34,6 +42,17 @@
     ],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://filescanner-app.heiphaistos.org/maj/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4RkQxMEJCRDZGRTE0NTEKUldSUkZQN1d1eEQ5eUhTQ28vdVR2a1FtVU5IdG5jVllBZXRxdWFwSXZwSGZHVm9JSWoxUVk2dWEK",
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

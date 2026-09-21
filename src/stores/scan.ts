@@ -102,11 +102,18 @@ export const useScanStore = defineStore('scan', {
 
       if (!outputPath) return
 
-      await invoke('export_report', {
-        result: this.result,
-        format,
-        outputPath,
-      })
+      // Sans ce catch l'échec d'export part en rejet non géré : le bouton
+      // reprend son état normal et rien n'indique que le fichier n'est pas écrit.
+      try {
+        await invoke('export_report', {
+          result: this.result,
+          format,
+          outputPath,
+        })
+        this.error = null
+      } catch (e) {
+        this.error = `Export ${format.toUpperCase()} échoué : ${String(e)}`
+      }
     },
 
     reset() {
