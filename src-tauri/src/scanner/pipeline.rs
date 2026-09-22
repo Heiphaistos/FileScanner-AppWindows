@@ -137,7 +137,7 @@ pub async fn scan_file(file_path: &str, settings: &AppSettings) -> Result<ScanRe
     let verdict = determine_verdict(verdict_score);
 
     Ok(ScanResult {
-        file_path: file_path.to_string(),
+        file_path: chemin_lisible(file_path),
         file_name,
         file_size,
         mime_type,
@@ -153,6 +153,40 @@ pub async fn scan_file(file_path: &str, settings: &AppSettings) -> Result<ScanRe
         ioc_list,
         scanned_at: chrono::Utc::now().to_rfc3339(),
     })
+}
+
+/// Retire le préfixe verbatim que `canonicalize` ajoute sous Windows.
+///
+/// Le chemin traverse le pipeline sous sa forme canonicalisée, donc préfixée.
+/// Affiché tel quel dans un rapport, c'est illisible pour l'utilisateur : le
+/// préfixe ne sert qu'aux appels système, pas à la présentation.
+fn chemin_lisible(chemin: &str) -> String {
+    // Un partage réseau canonicalisé devient `\\?\UNC\serveur\part` : le rendre
+    // sous sa forme `\\serveur\part` plutôt que d'en faire un chemin local.
+    if let Some(reste) = chemin.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{reste}");
+    }
+    chemin.strip_prefix(r"\\?\").unwrap_or(chemin).to_string()
+}
+
+#[cfg(test)]
+mod tests_chemin {
+    use super::chemin_lisible;
+
+    #[test]
+    fn le_prefixe_verbatim_disparait() {
+        assert_eq!(chemin_lisible(r"\\?\C:\Users\Momo\x.bat"), r"C:\Users\Momo\x.bat");
+    }
+
+    #[test]
+    fn un_partage_reseau_reste_un_partage() {
+        assert_eq!(chemin_lisible(r"\\?\UNC\serveur\part\x.bat"), r"\\serveur\part\x.bat");
+    }
+
+    #[test]
+    fn un_chemin_ordinaire_est_inchange() {
+        assert_eq!(chemin_lisible(r"C:\Users\Momo\x.bat"), r"C:\Users\Momo\x.bat");
+    }
 }
 
 fn compute_score(
