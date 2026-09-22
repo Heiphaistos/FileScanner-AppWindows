@@ -53,3 +53,6 @@ clamav-*/
 # === PORTABLE ZIP / RELEASE ===
 *.zip
 *.7z
+
+# Dossier de preparation du canal de mise a jour (outils/publier.py)
+release/
