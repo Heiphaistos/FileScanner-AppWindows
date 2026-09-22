@@ -256,6 +256,26 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// Le chemin rendu porte le prefixe verbatim. Tout l'export repose sur
+    /// l'hypothese que l'ecriture l'accepte : la verifier plutot que la supposer,
+    /// et verifier aussi que le fichier est relisible par son chemin ordinaire.
+    #[test]
+    fn ecriture_sur_le_chemin_verbatim_rendu() {
+        let home = std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
+            .expect("home introuvable");
+        let dir = PathBuf::from(&home).join("filescanner_test_ecriture");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let dest = dir.join("rapport.html");
+        let resolu = validate_export_path(dest.to_str().unwrap()).expect("doit etre accepte");
+
+        std::fs::write(&resolu, b"<html>ok</html>").expect("ecriture sur chemin verbatim");
+        assert_eq!(std::fs::read(&dest).unwrap(), b"<html>ok</html>");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn export_hors_du_home_est_refuse() {
         assert!(validate_export_path(r"C:\Windows\System32\rapport.html").is_err());
