@@ -45,6 +45,7 @@ pub fn run() {
             commands::test_vt_key,
             // Feature B — Quarantaine
             commands_extra::quarantine::quarantine_file,
+            commands_extra::quarantine::restore_quarantined,
         ])
         .run(tauri::generate_context!())
         .expect("Erreur au lancement de FileScanner");

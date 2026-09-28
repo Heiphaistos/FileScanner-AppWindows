@@ -28,7 +28,6 @@ async function executeQuarantine() {
   try {
     const path = await invoke<string>('quarantine_file', {
       filePath: store.result.file_path,
-      sha256: store.result.hashes.sha256,
     })
     quarPath.value = path
     success.value = true
