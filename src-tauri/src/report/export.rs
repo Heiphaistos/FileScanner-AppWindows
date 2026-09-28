@@ -274,82 +274,66 @@ pub fn export_html(result: &ScanResult, output_path: &str) -> Result<(), ScanErr
 pub fn export_pdf(result: &ScanResult, output_path: &str) -> Result<(), ScanError> {
     use printpdf::*;
 
-    let (doc, page1, layer1) =
-        PdfDocument::new("FileScanner Rapport", Mm(210.0), Mm(297.0), "Couche 1");
-    let layer = doc.get_page(page1).get_layer(layer1);
-    let font = doc
-        .add_builtin_font(BuiltinFont::Helvetica)
-        .map_err(|e| ScanError::PdfError(e.to_string()))?;
-    let font_bold = doc
-        .add_builtin_font(BuiltinFont::HelveticaBold)
-        .map_err(|e| ScanError::PdfError(e.to_string()))?;
+    // printpdf 0.12 : la page est une liste d'opérations ; polices intégrées = WinAnsi.
+    let mut ops: Vec<Op> = Vec::new();
+    let mut text = |t: String, size: f32, y: f32, bold: bool| {
+        let font = if bold { BuiltinFont::HelveticaBold } else { BuiltinFont::Helvetica };
+        ops.extend([
+            Op::StartTextSection,
+            Op::SetFont { font: PdfFontHandle::Builtin(font), size: Pt(size) },
+            Op::SetTextCursor { pos: Point::new(Mm(20.0), Mm(y)) },
+            Op::ShowText { items: vec![TextItem::Text(t)] },
+            Op::EndTextSection,
+        ]);
+    };
 
-    // printpdf 0.6 : Mm(f32), use_text(text, font_size: f32, x: Mm, y: Mm, font)
     let mut y = 270.0_f32;
-    let left = 20.0_f32;
 
-    layer.use_text("FileScanner - Rapport d'analyse", 16.0_f32, Mm(left), Mm(y), &font_bold);
+    text("FileScanner - Rapport d'analyse".into(), 16.0, y, true);
     y -= 10.0;
-    layer.use_text(
-        format!("Verdict : {} ({}/100)", result.verdict, result.verdict_score),
-        12.0_f32, Mm(left), Mm(y), &font_bold,
-    );
+    text(format!("Verdict : {} ({}/100)", result.verdict, result.verdict_score), 12.0, y, true);
     y -= 8.0;
-    layer.use_text(
-        format!("Fichier : {}  |  {} octets", result.file_name, result.file_size),
-        10.0_f32, Mm(left), Mm(y), &font,
-    );
+    text(format!("Fichier : {}  |  {} octets", result.file_name, result.file_size), 10.0, y, false);
     y -= 6.0;
-    layer.use_text(
-        format!("MIME : {}  |  Scanne le : {}", result.mime_type, result.scanned_at),
-        10.0_f32, Mm(left), Mm(y), &font,
-    );
+    text(format!("MIME : {}  |  Scanne le : {}", result.mime_type, result.scanned_at), 10.0, y, false);
     y -= 8.0;
-    layer.use_text(format!("MD5    : {}", result.hashes.md5), 9.0_f32, Mm(left), Mm(y), &font);
+    text(format!("MD5    : {}", result.hashes.md5), 9.0, y, false);
     y -= 6.0;
-    layer.use_text(format!("SHA256 : {}", result.hashes.sha256), 9.0_f32, Mm(left), Mm(y), &font);
+    text(format!("SHA256 : {}", result.hashes.sha256), 9.0, y, false);
     y -= 10.0;
 
     if let Some(vt) = &result.virustotal {
-        layer.use_text("VirusTotal", 12.0_f32, Mm(left), Mm(y), &font_bold);
+        text("VirusTotal".into(), 12.0, y, true);
         y -= 6.0;
-        layer.use_text(
-            format!("Detections : {}/{}  |  {}", vt.positives, vt.total, vt.scan_date),
-            10.0_f32, Mm(left), Mm(y), &font,
-        );
+        text(format!("Detections : {}/{}  |  {}", vt.positives, vt.total, vt.scan_date), 10.0, y, false);
         y -= 10.0;
     }
 
     if !result.yara_matches.is_empty() {
-        layer.use_text("Regles declenchees", 12.0_f32, Mm(left), Mm(y), &font_bold);
+        text("Regles declenchees".into(), 12.0, y, true);
         y -= 6.0;
         for m in &result.yara_matches {
             if y < 20.0 { break; }
-            layer.use_text(
-                format!("[{:?}] {} - {}", m.severity, m.rule_name, m.description),
-                9.0_f32, Mm(left), Mm(y), &font,
-            );
+            text(format!("[{:?}] {} - {}", m.severity, m.rule_name, m.description), 9.0, y, false);
             y -= 5.0;
         }
         y -= 5.0;
     }
 
     if !result.ioc_list.is_empty() && y > 20.0 {
-        layer.use_text("Indicateurs de compromission", 12.0_f32, Mm(left), Mm(y), &font_bold);
+        text("Indicateurs de compromission".into(), 12.0, y, true);
         y -= 6.0;
         for ioc in &result.ioc_list {
             if y < 20.0 { break; }
-            layer.use_text(
-                format!("[{:?}] {} : {}", ioc.severity, ioc.ioc_type, ioc.value),
-                9.0_f32, Mm(left), Mm(y), &font,
-            );
+            text(format!("[{:?}] {} : {}", ioc.severity, ioc.ioc_type, ioc.value), 9.0, y, false);
             y -= 5.0;
         }
     }
 
-    let bytes = doc
-        .save_to_bytes()
-        .map_err(|e| ScanError::PdfError(e.to_string()))?;
+    let page = PdfPage::new(Mm(210.0), Mm(297.0), ops);
+    let bytes = PdfDocument::new("FileScanner Rapport")
+        .with_pages(vec![page])
+        .save(&PdfSaveOptions::default(), &mut Vec::new());
 
     std::fs::write(output_path, bytes)?;
     Ok(())
@@ -366,5 +350,53 @@ pub fn export(result: &ScanResult, format: &str, output_path: &str) -> Result<()
             "Format inconnu : {}",
             format
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::report::types::{Hashes, IoC, Severity, VtResult, YaraMatch};
+
+    fn sample() -> ScanResult {
+        ScanResult {
+            file_path: "C:/tmp/facture_été.exe".into(),
+            file_name: "facture_été.exe".into(),
+            file_size: 123_456,
+            mime_type: "application/x-msdownload".into(),
+            hashes: Hashes { md5: "d41d8cd98f00b204e9800998ecf8427e".into(), sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".into() },
+            verdict: Verdict::Malicious,
+            verdict_score: 87,
+            pe_info: None,
+            script_info: None,
+            virustotal: Some(VtResult { positives: 12, total: 70, permalink: String::new(), scan_date: "2026-09-28".into(), detection_names: vec![] }),
+            clamav: None,
+            yara_matches: vec![YaraMatch { rule_name: "Chargeur_Déguisé".into(), description: "Exécutable caché derrière une extension à double sens".into(), severity: Severity::High, matched_strings: vec![] }],
+            ai_verdict: None,
+            ioc_list: vec![IoC { ioc_type: "URL".into(), value: "http://exemple.fr/à-télécharger".into(), severity: Severity::Medium, description: String::new() }],
+            scanned_at: "28/09/2026 à 14:05".into(),
+        }
+    }
+
+    /// Le rapport PDF est un PDF valide (1 page) et garde les accents en WinAnsi (é = 0xE9).
+    #[test]
+    fn pdf_report_is_valid_and_keeps_accents() {
+        let out = std::env::temp_dir().join(format!("fs_report_{}.pdf", std::process::id()));
+        let out_s = out.to_string_lossy().to_string();
+        export_pdf(&sample(), &out_s).unwrap();
+        if let Ok(dir) = std::env::var("FS_SAMPLES") {
+            std::fs::copy(&out, format!("{dir}/report.pdf")).unwrap();
+        }
+        let doc = lopdf::Document::load(&out_s).unwrap();
+        let _ = std::fs::remove_file(&out);
+        assert_eq!(doc.get_pages().len(), 1);
+        let content = doc.get_page_content(*doc.get_pages().get(&1).unwrap());
+        let needle = b"facture_\xE9t\xE9.exe";
+        let hex: String = needle.iter().map(|b| format!("{b:02X}")).collect();
+        assert!(
+            content.windows(needle.len()).any(|w| w == needle)
+                || String::from_utf8_lossy(&content).to_uppercase().contains(&hex),
+            "nom de fichier accentué introuvable en WinAnsi"
+        );
     }
 }
