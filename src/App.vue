@@ -2,6 +2,9 @@
 import { onMounted, ref } from 'vue'
 import DropZone from './components/DropZone.vue'
 import VerdictDisplay from './components/VerdictDisplay.vue'
+import AssessmentPanel from './components/AssessmentPanel.vue'
+import DetectionList from './components/DetectionList.vue'
+import IntelPanel from './components/IntelPanel.vue'
 import IoCTable from './components/IoCTable.vue'
 import PeDetails from './components/PeDetails.vue'
 import StringsDetail from './components/StringsDetail.vue'
@@ -130,7 +133,12 @@ onMounted(() => {
 
         <!-- Tab content -->
         <div class="tab-content">
-          <VerdictDisplay v-if="tab === 'verdict'" />
+          <template v-if="tab === 'verdict'">
+            <VerdictDisplay />
+            <AssessmentPanel />
+            <DetectionList />
+            <IntelPanel />
+          </template>
           <IoCTable v-if="tab === 'ioc'" />
           <PeDetails v-if="tab === 'pe'" />
           <StringsDetail v-if="tab === 'strings'" />
