@@ -166,8 +166,11 @@ pub async fn get_settings() -> Result<AppSettings, String> {
 #[tauri::command]
 pub async fn save_settings(app_settings: AppSettings) -> Result<(), String> {
     // Validation des champs sensibles avant persistance dans le keystore
-    if app_settings.vt_api_key.len() > 256 {
-        return Err("Clé API VirusTotal trop longue (max 256 caractères)".to_string());
+    for (label, key) in settings::api_keys(&app_settings) {
+        // Une clé est injectée dans un en-tête HTTP : ni retour à la ligne ni caractère de contrôle.
+        if key.len() > 256 || key.chars().any(|c| c.is_control()) {
+            return Err(format!("Clé API {label} invalide (256 caractères imprimables max)"));
+        }
     }
     if app_settings.clamav_db_path.len() > 4096 {
         return Err("Chemin ClamAV trop long (max 4096 caractères)".to_string());
@@ -199,9 +202,7 @@ pub async fn test_vt_key(api_key: String) -> Result<String, String> {
     if api_key.len() > 256 {
         return Err("Clé API trop longue (max 256 caractères)".to_string());
     }
-    crate::api::virustotal::test_key(&api_key)
-        .await
-        .map_err(|e| e.to_string())
+    crate::api::intel::test_vt_key(api_key.trim()).await
 }
 
 #[tauri::command]
