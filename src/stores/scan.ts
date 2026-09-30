@@ -13,6 +13,12 @@ export const useScanStore = defineStore('scan', {
     error: null as string | null,
     settings: {
       vt_api_key: '',
+      metadefender_api_key: '',
+      hybrid_analysis_api_key: '',
+      opentip_api_key: '',
+      otx_api_key: '',
+      abusech_api_key: '',
+      intel_free_lookups: true,
       ai_enabled: false,
       clamav_db_path: '',
     } as AppSettings,
@@ -49,7 +55,15 @@ export const useScanStore = defineStore('scan', {
      * La clé reste dans le keyring OS mais ne stagne plus en clair dans le heap JS.
      */
     clearSensitive() {
-      this.settings = { ...this.settings, vt_api_key: '' }
+      this.settings = {
+        ...this.settings,
+        vt_api_key: '',
+        metadefender_api_key: '',
+        hybrid_analysis_api_key: '',
+        opentip_api_key: '',
+        otx_api_key: '',
+        abusech_api_key: '',
+      }
     },
 
     async scanFile(filePath: string) {
