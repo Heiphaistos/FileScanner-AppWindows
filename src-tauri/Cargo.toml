@@ -1,6 +1,6 @@
 [package]
 name = "file-scanner"
-version = "1.4.0"
+version = "1.5.0"
 edition = "2021"
 
 [lib]
@@ -34,11 +34,10 @@ tree_magic_mini = "3"
 # HTTP client (rustls, pas d'OpenSSL)
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 
-# Secure storage API key
-keyring = "3"
-
-# PDF export
-printpdf = { version = "0.12", default-features = false }
+# Stockage des clés API dans le trousseau du système. Sans fonctionnalité de
+# plateforme, keyring 3 n'utilise qu'un magasin factice en mémoire : rien n'était
+# conservé. Les fonctionnalités hors plateforme cible sont ignorées.
+keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust"] }
 
 # Regex pour patterns de scan
 regex = "1"

@@ -3,8 +3,9 @@ pub mod ai {
 }
 pub mod analyzer;
 pub mod api {
-    pub mod virustotal;
+    pub mod intel;
 }
+pub mod assessment;
 pub mod background;
 pub mod commands;
 pub mod commands_extra {
@@ -15,6 +16,9 @@ pub mod config {
     pub mod settings;
 }
 pub mod error;
+pub mod explain;
+pub mod obf;
+pub mod knowledge;
 pub mod report;
 pub mod scanner;
 

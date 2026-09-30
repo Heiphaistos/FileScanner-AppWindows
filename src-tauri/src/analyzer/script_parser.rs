@@ -33,6 +33,9 @@ const DANGEROUS_CALLS: &[(&str, &str, Severity)] = &[
     ("mshta", "Exécution HTA (bypass)", Severity::Critical),
     ("regsvr32", "Exécution COM via regsvr32 (bypass)", Severity::Critical),
     ("rundll32", "Exécution DLL via rundll32", Severity::High),
+    ("vssadmin delete", "Suppression des clichés instantanés (préparation de rançongiciel)", Severity::Critical),
+    ("wbadmin delete", "Suppression des sauvegardes système (préparation de rançongiciel)", Severity::Critical),
+    ("bcdedit", "Modification du démarrage Windows (désactivation de la restauration)", Severity::High),
 ];
 
 const BASE64_MIN_LENGTH: usize = 64;
@@ -47,7 +50,7 @@ pub fn analyze(path: &Path, content: &str) -> (ScriptInfo, Vec<IoC>) {
     let content_lower = content.to_lowercase();
 
     for (pattern, description, severity) in DANGEROUS_CALLS {
-        if content_lower.contains(&pattern.to_lowercase()) {
+        if contains_token(&content_lower, &pattern.to_lowercase()) {
             dangerous_calls.push(pattern.to_string());
             ioc_list.push(IoC {
                 ioc_type: "Appel dangereux".to_string(),
@@ -58,7 +61,7 @@ pub fn analyze(path: &Path, content: &str) -> (ScriptInfo, Vec<IoC>) {
             // Collect up to 3 matching lines per pattern
             let pat_lower = pattern.to_lowercase();
             for (i, line) in content.lines().enumerate() {
-                if line.to_lowercase().contains(&pat_lower) {
+                if contains_token(&line.to_lowercase(), &pat_lower) {
                     let trimmed: String = line.trim().chars().take(200).collect();
                     matched_lines.push(ScriptMatchedLine {
                         line_number: i + 1,
@@ -109,6 +112,31 @@ pub fn analyze(path: &Path, content: &str) -> (ScriptInfo, Vec<IoC>) {
     )
 }
 
+fn is_word(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// Recherche `needle` en respectant les limites de mot : « IEX » ne doit pas
+/// correspondre dans « PIEXEC » ni « iexplore ». Les bords non alphanumériques
+/// du motif (« cmd.exe », « net user ») servent eux-mêmes de délimiteur.
+fn contains_token(hay: &str, needle: &str) -> bool {
+    let (Some(first), Some(last)) = (needle.chars().next(), needle.chars().last()) else {
+        return false;
+    };
+    let mut start = 0;
+    while let Some(pos) = hay[start..].find(needle) {
+        let at = start + pos;
+        let end = at + needle.len();
+        let before_ok = !is_word(first) || hay[..at].chars().next_back().is_none_or(|c| !is_word(c));
+        let after_ok = !is_word(last) || hay[end..].chars().next().is_none_or(|c| !is_word(c));
+        if before_ok && after_ok {
+            return true;
+        }
+        start = at + first.len_utf8();
+    }
+    false
+}
+
 fn detect_script_type(path: &Path) -> String {
     path.extension()
         .and_then(|e| e.to_str())
@@ -147,4 +175,24 @@ fn detect_obfuscation(content: &str) -> bool {
         content.contains("` ") || content.contains("`\"") || RE_CONCAT.is_match(content);
 
     caret_density > 0.05 || concat_ps
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn limites_de_mot() {
+        assert!(contains_token("iex (new-object net.webclient)", "iex"));
+        assert!(contains_token("x=1;iex($a)", "iex"));
+        assert!(!contains_token("start iexplore.exe", "iex"));
+        assert!(!contains_token("alexander", "iex"));
+        assert!(contains_token("a & cmd.exe /c x", "cmd.exe"));
+    }
+
+    #[test]
+    fn script_legitime_sans_iex() {
+        let (info, _) = analyze(Path::new("run.ps1"), "Start iexplore.exe\nWrite-Host 'Alexander'\n");
+        assert!(!info.dangerous_calls.iter().any(|c| c == "IEX"));
+    }
 }

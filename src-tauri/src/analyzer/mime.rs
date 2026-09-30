@@ -16,6 +16,20 @@ pub enum FileCategory {
     Other,
 }
 
+impl FileCategory {
+    /// Libellé affiché ; « Document » et « Autre » comptent comme documents pour
+    /// l'évaluation (un nom de malware y est souvent seulement cité).
+    pub fn label(&self) -> &'static str {
+        match self {
+            FileCategory::Pe => "Exécutable",
+            FileCategory::Script => "Script",
+            FileCategory::Archive => "Archive",
+            FileCategory::Document => "Document",
+            FileCategory::Other => "Autre",
+        }
+    }
+}
+
 pub fn categorize(mime: &str, path: &Path) -> FileCategory {
     let ext = path
         .extension()
