@@ -14,9 +14,16 @@ export interface PeSection {
   characteristics: number
 }
 
+export interface SignatureInfo {
+  status: 'trusted' | 'catalog' | 'untrusted' | 'invalid' | 'unverified' | 'absent'
+  signer: string
+  label: string
+}
+
 export interface PeInfo {
   is_64bit: boolean
   is_signed: boolean
+  signature?: SignatureInfo
   sections: PeSection[]
   imports: string[]
   entry_point: number

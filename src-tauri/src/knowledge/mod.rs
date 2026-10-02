@@ -356,6 +356,12 @@ pub fn other(ioc_type: &str, value: &str) -> Kb {
             "Beaucoup de logiciels légitimes sont compressés (UPX) ou protégés contre le piratage.",
             15,
         ),
+        "Signature" if value == "Invalide" => kb(
+            "Le programme porte une signature numérique que Windows rejette : contenu modifié après signature, certificat révoqué ou refusé.",
+            "Un fichier légitime retouché (cheval de Troie) ou une signature volée puis révoquée.",
+            "Rare : un téléchargement corrompu ou un vieux certificat révoqué par prudence.",
+            30,
+        ),
         "Signature" => kb(
             "Le programme n'a pas de signature numérique d'éditeur.",
             "Un malware est rarement signé (certificat coûteux et traçable).",

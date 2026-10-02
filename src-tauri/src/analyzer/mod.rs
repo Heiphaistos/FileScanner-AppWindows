@@ -1,3 +1,4 @@
+pub mod authenticode;
 pub mod entropy;
 pub mod hash;
 pub mod mime;

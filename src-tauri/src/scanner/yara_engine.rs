@@ -29,7 +29,10 @@ fn praw(bytes: &[u8]) -> Pattern {
     Pattern::Bytes(bytes.to_vec())
 }
 
-fn match_pattern_desc(data: &[u8], lower_data: &[u8], pattern: &Pattern) -> Option<String> {
+/// `word_start` : pour les règles qui cherchent un NOM (famille de malware, outil), le
+/// nom doit commencer un mot. Sans cela « formbook » sortait du dictionnaire Brotli
+/// embarqué par d'innombrables programmes (« …loveformbookplay… »).
+fn match_pattern_desc(data: &[u8], lower_data: &[u8], pattern: &Pattern, word_start: bool) -> Option<String> {
     match pattern {
         Pattern::Bytes(needle) => {
             if data.windows(needle.len()).any(|w| w == needle.as_slice()) {
@@ -48,7 +51,13 @@ fn match_pattern_desc(data: &[u8], lower_data: &[u8], pattern: &Pattern) -> Opti
         }
         Pattern::StringInsensitive(s) => {
             let needle = s.to_lowercase();
-            if lower_data.windows(needle.len()).any(|w| w == needle.as_bytes()) {
+            let n = needle.as_bytes();
+            let guard = word_start && n.first().is_some_and(|b| b.is_ascii_alphanumeric());
+            let found = lower_data
+                .windows(n.len())
+                .enumerate()
+                .any(|(i, w)| w == n && !(guard && i > 0 && lower_data[i - 1].is_ascii_alphanumeric()));
+            if found {
                 Some(format!("\"{}\"", s))
             } else {
                 None
@@ -588,10 +597,11 @@ impl YaraEngine {
         let mut matches = Vec::new();
 
         for rule in &self.rules {
+            let word_start = crate::assessment::is_mention_rule(rule.name);
             let matched_strings: Vec<String> = rule
                 .patterns
                 .iter()
-                .filter_map(|p| match_pattern_desc(data, &lower_data, p))
+                .filter_map(|p| match_pattern_desc(data, &lower_data, p, word_start))
                 .collect();
 
             let triggered = if rule.require_all {
@@ -617,5 +627,33 @@ impl YaraEngine {
 impl Default for YaraEngine {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::YaraEngine;
+
+    /// Écrit à l'envers dans le source, comme les règles (cf. `obf`).
+    fn rev(s: &str) -> Vec<u8> {
+        s.bytes().rev().collect()
+    }
+
+    fn rules(data: &[u8]) -> Vec<String> {
+        YaraEngine::new().scan(data).into_iter().map(|m| m.rule_name).collect()
+    }
+
+    #[test]
+    fn nom_de_famille_colle_dans_un_dictionnaire_ignore() {
+        // Extrait réel du dictionnaire Brotli embarqué par PureRGB.
+        let dico = rev("yalpkoobmrofevolydobrevoraey");
+        assert!(!rules(&dico).contains(&"Stealer_Modern_Families".to_string()));
+    }
+
+    #[test]
+    fn nom_de_famille_isole_toujours_detecte() {
+        for s in ["\0koobmroF\0", " 2CammuL", "\"radiV\""] {
+            assert!(rules(&rev(s)).contains(&"Stealer_Modern_Families".to_string()), "{s}");
+        }
     }
 }
