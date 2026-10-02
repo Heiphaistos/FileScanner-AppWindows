@@ -352,7 +352,7 @@ pub fn build(r: &ScanResult) -> Doc {
         b.push(Block::KeyValues {
             items: vec![
                 ("Architecture".into(), if bin.is_64bit { "64 bits".into() } else { "32 bits".into() }),
-                ("Signature numérique".into(), if bin.is_signed { "Présente (non vérifiée localement)".into() } else { "Absente".into() }),
+                ("Signature numérique".into(), bin.signature.label.clone()),
                 ("Compressé / protégé".into(), if bin.is_packed { "Probable".into() } else { "Non détecté".into() }),
                 ("Point d'entrée".into(), format!("0x{:x}", bin.entry_point)),
                 ("Entropie maximale".into(), format!("{:.2} / 8", bin.entropy_max)),

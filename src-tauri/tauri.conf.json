@@ -1,6 +1,6 @@
 {
   "productName": "FileScanner",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "identifier": "com.filescanner.app",
   "build": {
     "frontendDist": "../dist",

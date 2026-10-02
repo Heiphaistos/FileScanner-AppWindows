@@ -55,10 +55,59 @@ pub struct PeSection {
     pub characteristics: u32,
 }
 
+/// Résultat de la vérification de signature par Windows.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SigStatus {
+    /// Signature intégrée valide, chaîne de confiance reconnue par Windows.
+    Trusted,
+    /// Pas de signature intégrée, mais l'empreinte figure dans un catalogue signé (fichiers de Windows).
+    Catalog,
+    /// Signature intégrée intacte, mais certificat non reconnu (racine non installée, expiré…).
+    Untrusted,
+    /// Signature présente mais altérée, révoquée ou explicitement refusée.
+    Invalid,
+    /// Signature intégrée présente, non vérifiable sur ce système (hors Windows).
+    Unverified,
+    #[default]
+    Absent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SignatureInfo {
+    pub status: SigStatus,
+    /// Signataire (certificat feuille) ; code d'erreur Windows pour `Invalid`.
+    pub signer: String,
+    /// Libellé affiché tel quel par l'interface et les rapports.
+    pub label: String,
+}
+
+impl SignatureInfo {
+    pub fn new(status: SigStatus, signer: String) -> Self {
+        let who = if signer.is_empty() { "éditeur inconnu".to_string() } else { signer.clone() };
+        let label = match status {
+            SigStatus::Trusted => format!("Signé : {who}"),
+            SigStatus::Catalog => format!("Signé (catalogue Windows) : {who}"),
+            SigStatus::Untrusted => format!("Signé par {who} (certificat non reconnu par Windows, signature intacte)"),
+            SigStatus::Invalid => format!("Signature invalide ou altérée ({signer})"),
+            SigStatus::Unverified => "Signature présente (non vérifiée sur ce système)".to_string(),
+            SigStatus::Absent => "Non signé".to_string(),
+        };
+        Self { status, signer, label }
+    }
+
+    /// Signature reconnue par Windows (intégrée ou catalogue).
+    pub fn trusted(&self) -> bool {
+        matches!(self.status, SigStatus::Trusted | SigStatus::Catalog)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeInfo {
     pub is_64bit: bool,
     pub is_signed: bool,
+    #[serde(default)]
+    pub signature: SignatureInfo,
     pub sections: Vec<PeSection>,
     pub imports: Vec<String>,
     pub entry_point: u64,

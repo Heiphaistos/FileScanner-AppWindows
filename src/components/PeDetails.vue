@@ -6,6 +6,15 @@ const store = useScanStore()
 const pe = computed(() => store.result?.pe_info ?? null)
 const script = computed(() => store.result?.script_info ?? null)
 const showImports = ref(false)
+const sigLabel = computed(() =>
+  pe.value?.signature?.label ?? (pe.value?.is_signed ? 'Signé' : 'Non signé'),
+)
+const sigClass = computed(() => {
+  const st = pe.value?.signature?.status
+  if (st === 'trusted' || st === 'catalog') return 'text-safe'
+  if (st === 'invalid') return 'text-danger'
+  return st === 'absent' || !pe.value?.is_signed ? 'text-warn' : 'text-muted'
+})
 const copied = ref(false)
 
 function entropyClass(e: number) {
@@ -19,7 +28,7 @@ async function copyAll() {
   if (pe.value) {
     lines.push('=== Analyse PE ===')
     lines.push(`Architecture: ${pe.value.is_64bit ? '64-bit' : '32-bit'}`)
-    lines.push(`Signé: ${pe.value.is_signed ? 'Oui' : 'Non'}`)
+    lines.push(`Signature: ${sigLabel.value}`)
     lines.push(`Packer: ${pe.value.is_packed ? 'Oui' : 'Non'}`)
     lines.push(`Entropie max: ${pe.value.entropy_max.toFixed(3)}`)
     lines.push('')
@@ -66,9 +75,7 @@ async function copyAll() {
       </div>
       <div class="info-row">
         <span class="info-label">Signature</span>
-        <span :class="pe.is_signed ? 'text-safe' : 'text-warn'">
-          {{ pe.is_signed ? '✓ Signé' : '✗ Non signé' }}
-        </span>
+        <span :class="sigClass">{{ sigLabel }}</span>
       </div>
       <div class="info-row">
         <span class="info-label">Packer détecté</span>
@@ -149,6 +156,7 @@ async function copyAll() {
 .text-safe { color: var(--safe); }
 .text-warn { color: var(--suspicious); }
 .text-muted { color: var(--text-muted); }
+.text-danger { color: var(--malicious); font-weight: 600; }
 .entropy-high { color: var(--malicious); font-weight: 700; }
 .entropy-mid { color: var(--suspicious); }
 .entropy-low { color: var(--text-secondary); }

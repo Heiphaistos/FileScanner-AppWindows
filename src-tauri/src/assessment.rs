@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 
 use crate::api::intel::{IntelResult, IntelStatus, VtResult};
 use crate::knowledge::{self, Kb};
-use crate::report::types::{Assessment, Detection, Factor, ScanResult, Severity, Verdict};
+use crate::report::types::{Assessment, Detection, Factor, ScanResult, Severity, SigStatus, Verdict};
 
 /// Contexte global du fichier, calculé une fois.
 struct Ctx {
@@ -25,6 +25,8 @@ struct Ctx {
     vt_clean: Option<String>,
     vt_widely_seen: bool,
     signed_verified: Option<String>,
+    /// Signature intégrée intacte, certificat non reconnu (auto-signé, racine absente).
+    signed_untrusted: Option<String>,
     signed_unverified: bool,
     av_confirmed: Option<String>,
     is_document: bool,
@@ -59,7 +61,7 @@ fn build_ctx(r: &ScanResult, vt: Option<&VtResult>, intel: &[IntelResult], is_in
         .map(|s| s.source.as_str())
         .collect();
 
-    let (vt_clean, vt_widely_seen, signed_verified) = match vt {
+    let (vt_clean, vt_widely_seen, vt_signed) = match vt {
         Some(v) => {
             let clean = (v.positives == 0 && v.suspicious == 0 && v.total >= 50)
                 .then(|| format!("0 détection sur {} antivirus (VirusTotal)", v.total));
@@ -99,6 +101,8 @@ fn build_ctx(r: &ScanResult, vt: Option<&VtResult>, intel: &[IntelResult], is_in
         .unwrap_or_default();
     let imp = |k: &str| imports.iter().any(|i| i.contains(k));
 
+    let sig = r.pe_info.as_ref().map(|b| &b.signature);
+
     let is_document = matches!(r.category.as_str(), "Document" | "Autre")
         || r.mime_type.starts_with("text/plain")
         || r.mime_type.starts_with("image/");
@@ -107,8 +111,13 @@ fn build_ctx(r: &ScanResult, vt: Option<&VtResult>, intel: &[IntelResult], is_in
         known_good,
         vt_clean,
         vt_widely_seen,
-        signed_verified,
-        signed_unverified: r.pe_info.as_ref().is_some_and(|b| b.is_signed),
+        // Windows qui valide la signature localement prime sur l'avis de VirusTotal.
+        signed_verified: sig
+            .filter(|s| s.trusted())
+            .map(|s| if s.status == SigStatus::Catalog { format!("{}, catalogue Windows", s.signer) } else { s.signer.clone() })
+            .or(vt_signed),
+        signed_untrusted: sig.filter(|s| s.status == SigStatus::Untrusted).map(|s| s.label.clone()),
+        signed_unverified: sig.is_some_and(|s| s.status == SigStatus::Unverified),
         av_confirmed: (!malicious_sources.is_empty()).then(|| malicious_sources.join(", ")),
         is_document,
         is_installer,
@@ -165,7 +174,7 @@ fn is_comment(line: &str) -> bool {
 }
 
 /// Règles YARA qui détectent un NOM (famille, outil) plutôt qu'un comportement.
-fn is_mention_rule(rule: &str) -> bool {
+pub(crate) fn is_mention_rule(rule: &str) -> bool {
     matches!(
         rule,
         "Ransomware_Modern_Families"
@@ -355,6 +364,10 @@ fn context_factors(sig: &Signal, c: &Ctx) -> Vec<Factor> {
         }
         if let Some(who) = &c.signed_verified {
             f.push(factor(format!("signé par un éditeur vérifié ({who})"), -20));
+        } else if let Some(who) = c.signed_untrusted.as_ref().filter(|_| matches!(sig.kind, Kind::Import | Kind::Structure | Kind::Yara)) {
+            // N'importe qui peut créer un certificat : moins qu'une signature reconnue, mais le
+            // fichier n'a pas été modifié depuis sa signature et son auteur est identifiable.
+            f.push(factor(format!("{who} : fichier intact depuis sa signature"), -12));
         } else if c.signed_unverified && matches!(sig.kind, Kind::Import | Kind::Structure | Kind::Yara) {
             f.push(factor("contient une signature numérique d'éditeur (non vérifiée ici)", -8));
         }
@@ -489,6 +502,8 @@ pub fn assess(r: &mut ScanResult, is_installer: bool) {
     }
     if let Some(s) = &ctx.signed_verified {
         reasons_legitimate.push(format!("Signé numériquement par un éditeur vérifié : {s}."));
+    } else if let Some(s) = &ctx.signed_untrusted {
+        reasons_legitimate.push(format!("{s}."));
     }
     let weak = detections.iter().filter(|d| d.confidence < 30).count();
     if weak > 0 {
@@ -548,5 +563,115 @@ fn sev_rank(s: &Severity) -> u8 {
         Severity::Medium => 1,
         Severity::High => 2,
         Severity::Critical => 3,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::report::types::{Hashes, IoC, PeInfo, SignatureInfo, YaraMatch};
+
+    fn imp(name: &str, severity: Severity) -> IoC {
+        IoC { ioc_type: "Import suspect".into(), value: name.into(), severity, description: String::new() }
+    }
+
+    fn yara(rule: &str, severity: Severity) -> YaraMatch {
+        YaraMatch { rule_name: rule.into(), description: rule.into(), severity, matched_strings: vec![] }
+    }
+
+    /// Exécutable de test : imports + règles donnés, signature au choix.
+    fn exe(sig: SigStatus, imports: &[(&str, Severity)], rules: &[(&str, Severity)]) -> ScanResult {
+        let signature = SignatureInfo::new(sig, "Heiphaistos".into());
+        let mut ioc_list: Vec<IoC> = imports.iter().map(|(n, s)| imp(n, s.clone())).collect();
+        if sig == SigStatus::Absent {
+            ioc_list.push(IoC { ioc_type: "Signature".into(), value: "Non signé".into(), severity: Severity::Low, description: String::new() });
+        }
+        if sig == SigStatus::Invalid {
+            ioc_list.push(IoC { ioc_type: "Signature".into(), value: "Invalide".into(), severity: Severity::High, description: String::new() });
+        }
+        let mut r = ScanResult {
+            file_path: "C:/t/app.exe".into(),
+            file_name: "app.exe".into(),
+            file_size: 1,
+            mime_type: "application/x-msdownload".into(),
+            category: "Exécutable".into(),
+            hashes: Hashes { md5: String::new(), sha256: String::new() },
+            verdict: Verdict::Unknown,
+            verdict_score: 0,
+            pe_info: Some(PeInfo {
+                is_64bit: true,
+                is_signed: sig != SigStatus::Absent,
+                signature,
+                sections: vec![],
+                imports: vec![],
+                entry_point: 0,
+                entropy_max: 0.0,
+                suspicious_imports: imports.iter().map(|(n, _)| n.to_string()).collect(),
+                is_packed: false,
+            }),
+            script_info: None,
+            virustotal: None,
+            clamav: None,
+            yara_matches: rules.iter().map(|(n, s)| yara(n, s.clone())).collect(),
+            ai_verdict: None,
+            ioc_list,
+            scanned_at: String::new(),
+            explanation: String::new(),
+            intel: vec![],
+            detections: vec![],
+            assessment: Default::default(),
+        };
+        assess(&mut r, false);
+        r
+    }
+
+    /// Profil réel de PureRGB 0.20.0 portable (Tauri + WebView2) après correction de la règle « formbook ».
+    const APP_ORDINAIRE: &[(&str, Severity)] = &[
+        ("ReadProcessMemory", Severity::Medium),
+        ("NtQueryInformationProcess", Severity::Low),
+        ("IsDebuggerPresent", Severity::Low),
+        ("OpenProcess", Severity::Low),
+        ("CreateProcessW", Severity::Low),
+        ("VirtualAlloc", Severity::Low),
+        ("GetAsyncKeyState", Severity::Low),
+        ("CryptDecrypt", Severity::Medium),
+    ];
+    const REGLES_ORDINAIRES: &[(&str, Severity)] =
+        &[("Shellcode_Patterns", Severity::High), ("Keylogger_Strings", Severity::Medium)];
+
+    const INJECTION: &[(&str, Severity)] = &[
+        ("VirtualAllocEx", Severity::High),
+        ("WriteProcessMemory", Severity::Critical),
+        ("CreateRemoteThread", Severity::Critical),
+    ];
+
+    #[test]
+    fn app_auto_signee_avec_imports_courants_reste_saine() {
+        let r = exe(SigStatus::Untrusted, APP_ORDINAIRE, REGLES_ORDINAIRES);
+        assert_eq!(r.verdict, Verdict::Safe, "p = {}", r.verdict_score);
+        assert!(r.detections.iter().all(|d| d.factors.iter().any(|f| f.delta == -12)), "facteur signature intacte appliqué");
+        assert!(r.assessment.reasons_legitimate.iter().any(|l| l.contains("Heiphaistos")));
+    }
+
+    #[test]
+    fn la_signature_reconnue_attenue_plus_que_la_signature_non_reconnue() {
+        let trusted = exe(SigStatus::Catalog, APP_ORDINAIRE, REGLES_ORDINAIRES).verdict_score;
+        let untrusted = exe(SigStatus::Untrusted, APP_ORDINAIRE, REGLES_ORDINAIRES).verdict_score;
+        let absent = exe(SigStatus::Absent, APP_ORDINAIRE, REGLES_ORDINAIRES).verdict_score;
+        assert!(trusted < untrusted && untrusted < absent, "{trusted} < {untrusted} < {absent}");
+    }
+
+    #[test]
+    fn injection_de_code_reste_suspecte_meme_auto_signee() {
+        let r = exe(SigStatus::Untrusted, INJECTION, &[("Process_Injection", Severity::Critical)]);
+        assert_ne!(r.verdict, Verdict::Safe, "p = {}", r.verdict_score);
+    }
+
+    #[test]
+    fn signature_alteree_aggrave_le_verdict() {
+        let invalid = exe(SigStatus::Invalid, APP_ORDINAIRE, REGLES_ORDINAIRES);
+        let absent = exe(SigStatus::Absent, APP_ORDINAIRE, REGLES_ORDINAIRES);
+        assert!(invalid.verdict_score > absent.verdict_score, "{} > {}", invalid.verdict_score, absent.verdict_score);
+        assert_ne!(invalid.verdict, Verdict::Safe, "p = {}", invalid.verdict_score);
     }
 }

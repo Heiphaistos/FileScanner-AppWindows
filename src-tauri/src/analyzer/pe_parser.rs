@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::analyzer::entropy::shannon_entropy;
 use crate::error::ScanError;
-use crate::report::types::{IoC, PeInfo, PeSection, Severity};
+use crate::report::types::{IoC, PeInfo, PeSection, Severity, SigStatus};
 
 const SUSPICIOUS_IMPORTS: &[&str] = &[
     "VirtualAlloc",
@@ -48,7 +48,7 @@ pub fn parse(path: &Path, raw_bytes: &[u8]) -> Result<(PeInfo, Vec<IoC>), ScanEr
 }
 
 fn analyze_pe(
-    _path: &Path,
+    path: &Path,
     raw_bytes: &[u8],
     pe: &goblin::pe::PE,
 ) -> Result<(PeInfo, Vec<IoC>), ScanError> {
@@ -104,7 +104,8 @@ fn analyze_pe(
         .collect();
 
     let is_packed = detect_packer(raw_bytes) || entropy_max > 7.2;
-    let is_signed = detect_signature(pe);
+    let signature = crate::analyzer::authenticode::verify(path, detect_signature(pe));
+    let is_signed = signature.status != SigStatus::Absent;
 
     let mut ioc_list = Vec::new();
 
@@ -130,13 +131,20 @@ fn analyze_pe(
         });
     }
 
-    if !is_signed {
-        ioc_list.push(IoC {
+    match signature.status {
+        SigStatus::Absent => ioc_list.push(IoC {
             ioc_type: "Signature".to_string(),
             value: "Non signé".to_string(),
             severity: Severity::Low,
-            description: "L'exécutable ne possède pas de signature numérique valide".to_string(),
-        });
+            description: "L'exécutable ne possède aucune signature numérique (ni intégrée, ni catalogue Windows)".to_string(),
+        }),
+        SigStatus::Invalid => ioc_list.push(IoC {
+            ioc_type: "Signature".to_string(),
+            value: "Invalide".to_string(),
+            severity: Severity::High,
+            description: format!("Signature numérique altérée, révoquée ou refusée par Windows ({})", signature.signer),
+        }),
+        _ => {}
     }
 
     // Bug corrigé : utilise la signature binaire `sig` (2ème élément), pas le nom `name`
@@ -160,6 +168,7 @@ fn analyze_pe(
         PeInfo {
             is_64bit,
             is_signed,
+            signature,
             sections,
             imports,
             entry_point,
