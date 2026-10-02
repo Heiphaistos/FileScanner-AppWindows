@@ -5,9 +5,12 @@ use crate::analyzer::entropy::shannon_entropy;
 use crate::error::ScanError;
 use crate::report::types::{IoC, PeInfo, PeSection, Severity, SigStatus};
 
-const SUSPICIOUS_IMPORTS: &[&str] = &[
+/// Les noms qui sont aussi des motifs YARA passent par `txt!` (cf. `obf`) ; « VirtualAllocEx »
+/// est couvert par « VirtualAlloc » (comparaison par inclusion).
+fn suspicious_imports() -> &'static [&'static str] {
+    static L: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+    L.get_or_init(|| vec![
     "VirtualAlloc",
-    "VirtualAllocEx",
     "WriteProcessMemory",
     "CreateRemoteThread",
     "NtUnmapViewOfSection",
@@ -18,24 +21,32 @@ const SUSPICIOUS_IMPORTS: &[&str] = &[
     "CryptDecrypt",
     "InternetOpen",
     "InternetConnect",
-    "URLDownloadToFile",
+    crate::txt!("URLDownloadToFile"),
     "ShellExecute",
     "WinExec",
     "CreateProcess",
     "OpenProcess",
     "ReadProcessMemory",
     "IsDebuggerPresent",
-    "CheckRemoteDebuggerPresent",
+    crate::txt!("CheckRemoteDebuggerPresent"),
     "NtQueryInformationProcess",
-];
+    ])
+}
 
-const PACKER_SIGNATURES: &[(&str, &[u8])] = &[
-    ("UPX", b"UPX0"),
-    ("UPX1", b"UPX1"),
-    ("MPRESS", b"MPRESS1"),
-    ("PECompact", b"PECompact2"),
-    ("Themida", b"Themida"),
-];
+/// Noms et octets stockés inversés (cf. `obf`) : en clair, notre exe se détectait packé.
+fn packer_signatures() -> &'static [(&'static str, Vec<u8>)] {
+    use crate::{obf::restore, sig_bytes, txt};
+    static L: std::sync::OnceLock<Vec<(&'static str, Vec<u8>)>> = std::sync::OnceLock::new();
+    L.get_or_init(|| {
+        vec![
+            (txt!("UPX"), restore(sig_bytes!(b"UPX0"))),
+            (txt!("UPX1"), restore(sig_bytes!(b"UPX1"))),
+            (txt!("MPRESS"), restore(sig_bytes!(b"MPRESS1"))),
+            (txt!("PECompact"), restore(sig_bytes!(b"PECompact2"))),
+            (txt!("Themida"), restore(sig_bytes!(b"Themida"))),
+        ]
+    })
+}
 
 pub fn parse(path: &Path, raw_bytes: &[u8]) -> Result<(PeInfo, Vec<IoC>), ScanError> {
     let obj = Object::parse(raw_bytes)
@@ -96,7 +107,7 @@ fn analyze_pe(
     let suspicious_imports: Vec<String> = imports
         .iter()
         .filter(|name| {
-            SUSPICIOUS_IMPORTS
+            suspicious_imports()
                 .iter()
                 .any(|s| name.to_lowercase().contains(&s.to_lowercase()))
         })
@@ -150,10 +161,10 @@ fn analyze_pe(
     // Bug corrigé : utilise la signature binaire `sig` (2ème élément), pas le nom `name`
     // Avant : windows(4).any(w == name[..4]) → cherchait "Them", "MPRE" etc. = FP massifs
     // Après : windows(sig.len()).any(w == sig) → signature exacte
-    for (name, sig) in PACKER_SIGNATURES {
+    for (name, sig) in packer_signatures() {
         if raw_bytes
             .windows(sig.len())
-            .any(|w| w == *sig)
+            .any(|w| w == sig.as_slice())
         {
             ioc_list.push(IoC {
                 ioc_type: "Packer".to_string(),
@@ -181,9 +192,9 @@ fn analyze_pe(
 }
 
 fn detect_packer(data: &[u8]) -> bool {
-    PACKER_SIGNATURES
+    packer_signatures()
         .iter()
-        .any(|(_, sig)| data.windows(sig.len()).any(|w| w == *sig))
+        .any(|(_, sig)| data.windows(sig.len()).any(|w| w == sig.as_slice()))
 }
 
 const IMAGE_DIRECTORY_ENTRY_SECURITY: usize = 4;
@@ -213,9 +224,9 @@ fn classify_import_severity(import: &str) -> Severity {
     ];
     // High : hooking, téléchargement, exécution directe — suspect mais pas forcément malveillant
     let high = &[
-        "VirtualAllocEx",
+        crate::txt!("VirtualAllocEx"),
         "SetWindowsHookEx",
-        "URLDownloadToFile",
+        crate::txt!("URLDownloadToFile"),
         "WinExec",
     ];
     // Medium : APIs réseau ou crypto — légitime dans certains contextes

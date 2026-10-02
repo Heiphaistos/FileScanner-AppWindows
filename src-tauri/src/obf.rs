@@ -18,7 +18,9 @@ pub const fn flip<const N: usize>(s: &[u8]) -> [u8; N] {
 }
 
 pub fn restore(reversed: &[u8]) -> Vec<u8> {
-    reversed.iter().rev().copied().collect()
+    // black_box : sans lui, LLVM replie l'inversion d'un littéral court à la
+    // compilation et réécrit le motif EN CLAIR dans l'exe (vu : « mimikatz » en mov imm64).
+    std::hint::black_box(reversed).iter().rev().copied().collect()
 }
 
 pub fn restore_str(reversed: &[u8]) -> String {
@@ -43,6 +45,16 @@ macro_rules! sig_bytes {
     }};
 }
 
+/// Texte `&'static str` stocké inversé, restauré une fois au premier usage. Pour les
+/// libellés destinés à l'utilisateur qui citent des noms de malwares.
+#[macro_export]
+macro_rules! txt {
+    ($s:literal) => {{
+        static C: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        C.get_or_init(|| $crate::obf::restore_str($crate::sig!($s))).as_str()
+    }};
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,5 +63,6 @@ mod tests {
     fn aller_retour() {
         assert_eq!(restore_str(crate::sig!("temoin abc")), "temoin abc");
         assert_eq!(restore(crate::sig_bytes!(b"\x4d\x5a\x90\x00")), vec![0x4d, 0x5a, 0x90, 0x00]);
+        assert_eq!(crate::txt!("témoin é"), "témoin é");
     }
 }

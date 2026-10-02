@@ -19,7 +19,7 @@ fn family_hint(rule: &str) -> Option<&'static str> {
         ("keylogger", "un enregistreur de frappe : il capture ce que tu tapes au clavier"),
         ("rat", "un outil de prise de contrôle à distance : un attaquant pourrait piloter la machine"),
         ("c2_", "un outil de communication avec un serveur d'attaquant (contrôle à distance)"),
-        ("mimikatz", "un outil de vol d'identifiants Windows très connu"),
+        (crate::txt!("mimikatz"), "un outil de vol d'identifiants Windows très connu"),
         ("cobaltstrike", "un cadre d'attaque professionnel utilisé pour prendre le contrôle d'un réseau"),
         ("miner", "un mineur de cryptomonnaie : il utilise ta machine pour miner à ton insu"),
         ("webshell", "une porte dérobée pour serveur web : elle permet d'exécuter des commandes à distance"),

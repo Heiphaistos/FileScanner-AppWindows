@@ -40,8 +40,8 @@ impl LocalInference {
         for m in yara_matches {
             match m.rule_name.as_str() {
                 "Ransomware_Strings" => observations.push("chaînes caractéristiques de ransomware"),
-                "Process_Injection" => observations.push("pattern d'injection de processus (CreateRemoteThread + VirtualAllocEx)"),
-                "Mimikatz_Strings" => observations.push("outil de vol de credentials Mimikatz identifié"),
+                "Process_Injection" => observations.push(crate::txt!("pattern d'injection de processus (CreateRemoteThread + VirtualAllocEx)")),
+                "Mimikatz_Strings" => observations.push(crate::txt!("outil de vol de credentials Mimikatz identifié")),
                 "Keylogger_Strings" => observations.push("comportement de keylogger suspecté"),
                 _ => {}
             }

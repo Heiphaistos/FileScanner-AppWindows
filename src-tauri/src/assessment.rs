@@ -125,7 +125,7 @@ fn build_ctx(r: &ScanResult, vt: Option<&VtResult>, intel: &[IntelResult], is_in
         script_exec: has_call(EXEC_CALLS),
         script_memory: has_call(MEMORY_EXEC) || has_call(MEMORY_DOWNLOAD),
         script_obfuscated: r.script_info.as_ref().is_some_and(|s| s.obfuscation_detected),
-        injection_trio: imp("virtualallocex") && imp("writeprocessmemory") && imp("createremotethread"),
+        injection_trio: imp(crate::txt!("virtualallocex")) && imp("writeprocessmemory") && imp("createremotethread"),
     }
 }
 
@@ -395,7 +395,7 @@ fn context_factors(sig: &Signal, c: &Ctx) -> Vec<Factor> {
                 f.push(factor("le script contient aussi du code encodé/obfusqué", 10));
             }
         }
-        Kind::Import if c.injection_trio && ["virtualallocex", "writeprocessmemory", "createremotethread"].iter().any(|k| v.contains(k)) => {
+        Kind::Import if c.injection_trio && [crate::txt!("virtualallocex"), "writeprocessmemory", "createremotethread"].iter().any(|k| v.contains(k)) => {
             f.push(factor("les 3 fonctions de l'injection de code sont présentes ensemble", 20));
         }
         Kind::Structure if c.is_installer && matches!(sig.group, "packing" | "signature") => {

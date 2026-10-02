@@ -1,5 +1,5 @@
 use crate::report::types::{Severity, YaraMatch};
-use crate::{sig, sig_bytes};
+use crate::{sig, sig_bytes, txt};
 
 struct Rule {
     name: &'static str,
@@ -22,11 +22,6 @@ fn ps(reversed: &[u8]) -> Pattern {
 /// Motif d'octets, stocké inversé dans le binaire (cf. `obf`).
 fn pb(reversed: &[u8]) -> Pattern {
     Pattern::Bytes(crate::obf::restore(reversed))
-}
-
-/// Motif d'octets en clair (séquences non textuelles, ex. NOP sled) : rien à masquer.
-fn praw(bytes: &[u8]) -> Pattern {
-    Pattern::Bytes(bytes.to_vec())
 }
 
 /// `word_start` : pour les règles qui cherchent un NOM (famille de malware, outil), le
@@ -53,10 +48,14 @@ fn match_pattern_desc(data: &[u8], lower_data: &[u8], pattern: &Pattern, word_st
             let needle = s.to_lowercase();
             let n = needle.as_bytes();
             let guard = word_start && n.first().is_some_and(|b| b.is_ascii_alphanumeric());
-            let found = lower_data
-                .windows(n.len())
-                .enumerate()
-                .any(|(i, w)| w == n && !(guard && i > 0 && lower_data[i - 1].is_ascii_alphanumeric()));
+            // Extension (« .conti ») : elle doit aussi FINIR le mot, sinon toute phrase
+            // française collée à la suivante (« …comportement.Contient… ») déclenche.
+            let end_guard = word_start && n.first() == Some(&b'.');
+            let found = lower_data.windows(n.len()).enumerate().any(|(i, w)| {
+                w == n
+                    && !(guard && i > 0 && lower_data[i - 1].is_ascii_alphanumeric())
+                    && !(end_guard && lower_data.get(i + n.len()).is_some_and(|b| b.is_ascii_alphanumeric()))
+            });
             if found {
                 Some(format!("\"{}\"", s))
             } else {
@@ -71,28 +70,28 @@ fn build_rules() -> Vec<Rule> {
         // Fichier de test antivirus : inoffensif, mais détecté par convention.
         Rule {
             name: "EICAR_Test_File",
-            description: "Fichier de test antivirus EICAR (inoffensif, détecté par convention)",
+            description: txt!("Fichier de test antivirus EICAR (inoffensif, détecté par convention)"),
             severity: Severity::Critical,
             patterns: vec![pb(sig_bytes!(b"EICAR-STANDARD-ANTIVIRUS-TEST-FILE"))],
             require_all: false,
         },
         Rule {
             name: "UPX_Packer",
-            description: "Packer UPX détecté (compression PE)",
+            description: txt!("Packer UPX détecté (compression PE)"),
             severity: Severity::Medium,
             patterns: vec![pb(sig_bytes!(b"UPX0")), pb(sig_bytes!(b"UPX!"))],
             require_all: false,
         },
         Rule {
             name: "MPRESS_Packer",
-            description: "Packer MPRESS détecté",
+            description: txt!("Packer MPRESS détecté"),
             severity: Severity::Medium,
             patterns: vec![pb(sig_bytes!(b"MPRESS1"))],
             require_all: false,
         },
         Rule {
             name: "Ransomware_Strings",
-            description: "Chaînes caractéristiques de ransomware (message victime)",
+            description: txt!("Chaînes caractéristiques de ransomware (message victime)"),
             severity: Severity::Critical,
             // require_all:true — les 2 strings doivent coexister pour éviter FP sur outils sécu
             patterns: vec![
@@ -103,7 +102,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "Ransomware_Payment",
-            description: "Instructions paiement ransom (BTC + Tor)",
+            description: txt!("Instructions paiement ransom (BTC + Tor)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("bitcoin")),
@@ -113,7 +112,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "Process_Injection",
-            description: "Signatures d'injection de processus (CreateRemoteThread)",
+            description: txt!("Signatures d'injection de processus (CreateRemoteThread)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("createremotethread")),
@@ -123,7 +122,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "Keylogger_Strings",
-            description: "APIs capture clavier (GetAsyncKeyState + GetKeyboardState)",
+            description: txt!("APIs capture clavier (GetAsyncKeyState + GetKeyboardState)"),
             // Medium — les 2 APIs coexistent dans WebView2/Chromium = FP pour apps Tauri
             severity: Severity::Medium,
             patterns: vec![
@@ -134,14 +133,14 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "Network_Downloader",
-            description: "Téléchargement réseau suspect (URLDownloadToFile)",
+            description: txt!("Téléchargement réseau suspect (URLDownloadToFile)"),
             severity: Severity::High,
             patterns: vec![ps(sig!("urldownloadtofile"))],
             require_all: false,
         },
         Rule {
             name: "Mimikatz_Strings",
-            description: "Signatures de l'outil de vol de credentials Mimikatz",
+            description: txt!("Signatures de l'outil de vol de credentials Mimikatz"),
             severity: Severity::Critical,
             patterns: vec![
                 pb(sig_bytes!(b"mimikatz")),
@@ -152,7 +151,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "AntiDebug_Techniques",
-            description: "Anti-debug actif : IsDebuggerPresent + NtQueryInformationProcess",
+            description: txt!("Anti-debug actif : IsDebuggerPresent + NtQueryInformationProcess"),
             severity: Severity::High,
             // require_all:true — IsDebuggerPresent seul = FP (Tauri, .NET, tout framework)
             patterns: vec![
@@ -163,7 +162,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "Persistence_Registry",
-            description: "Accès clés de démarrage du registre",
+            description: txt!("Accès clés de démarrage du registre"),
             // Medium — outils diagnostic accèdent légitimement à ces clés
             severity: Severity::Medium,
             patterns: vec![
@@ -174,27 +173,17 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "Shellcode_Patterns",
-            description: "NOP sled extrême (64+ bytes) — shellcode probable",
+            description: txt!("NOP sled extrême (64+ bytes) — shellcode probable"),
             severity: Severity::High,
             // 32 NOPs = encore FP dans .rdata/assets Tauri bundlés. 64 NOPs = vraiment anormal.
             // Un NOP sled légitime (alignement compilateur) dépasse rarement 16 bytes.
-            patterns: vec![
-                praw(&[
-                    0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-                    0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-                    0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-                    0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-                    0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-                    0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-                    0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-                    0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-                ]),
-            ],
+            // Généré à l'exécution : un littéral de 64 NOP déclenchait la règle sur notre exe.
+            patterns: vec![Pattern::Bytes(vec![0x90; 64])],
             require_all: true,
         },
         Rule {
             name: "PowerShell_Encoded_Cmd",
-            description: "Commande PowerShell encodée (-EncodedCommand)",
+            description: txt!("Commande PowerShell encodée (-EncodedCommand)"),
             // Medium — outils diagnostic/admin utilisent légitimement -encodedcommand
             severity: Severity::Medium,
             patterns: vec![
@@ -205,7 +194,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "Suspicious_Certutil",
-            description: "Utilisation de certutil pour decode/téléchargement",
+            description: txt!("Utilisation de certutil pour decode/téléchargement"),
             severity: Severity::High,
             patterns: vec![
                 ps(sig!("certutil")),
@@ -216,7 +205,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Ransomware — familles modernes ────────────────────────────────────
         Rule {
             name: "Ransomware_Modern_Families",
-            description: "Noms de familles ransomware connues (LockBit, Conti, BlackCat, REvil…)",
+            description: txt!("Noms de familles ransomware connues (LockBit, Conti, BlackCat, REvil…)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("lockbit")),
@@ -231,7 +220,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "Ransomware_Extensions",
-            description: "Extensions de chiffrement ransomware spécifiques",
+            description: txt!("Extensions de chiffrement ransomware spécifiques"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!(".lockbit")),
@@ -244,7 +233,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Stealers ──────────────────────────────────────────────────────────
         Rule {
             name: "Stealer_Modern_Families",
-            description: "Infostealers connus (RedLine, Raccoon, Vidar, Lumma, AgentTesla, FormBook)",
+            description: txt!("Infostealers connus (RedLine, Raccoon, Vidar, Lumma, AgentTesla, FormBook)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("redline stealer")),
@@ -259,7 +248,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "Discord_Webhook_Exfil",
-            description: "Exfiltration via webhook Discord (vol de données)",
+            description: txt!("Exfiltration via webhook Discord (vol de données)"),
             severity: Severity::High,
             patterns: vec![
                 ps(sig!("discord.com/api/webhooks/")),
@@ -270,7 +259,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Injection / évasion (parité avec version web) ─────────────────────
         Rule {
             name: "Process_Hollowing",
-            description: "Process hollowing (NtUnmapViewOfSection + ResumeThread)",
+            description: txt!("Process hollowing (NtUnmapViewOfSection + ResumeThread)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("ntunmapviewofsection")),
@@ -280,7 +269,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "AMSI_Bypass",
-            description: "Bypass AMSI (antimalware scan interface)",
+            description: txt!("Bypass AMSI (antimalware scan interface)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("amsiutils")),
@@ -291,14 +280,14 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "Defender_Tampering",
-            description: "Désactivation de Windows Defender",
+            description: txt!("Désactivation de Windows Defender"),
             severity: Severity::Critical,
             patterns: vec![ps(sig!("set-mppreference -disablerealtimemonitoring"))],
             require_all: false,
         },
         Rule {
             name: "PHP_Webshell",
-            description: "Webshell PHP (eval + entrée utilisateur)",
+            description: txt!("Webshell PHP (eval + entrée utilisateur)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("eval($_post")),
@@ -309,7 +298,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "Bash_Reverse_Shell",
-            description: "Reverse shell bash (/dev/tcp)",
+            description: txt!("Reverse shell bash (/dev/tcp)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("/dev/tcp/")),
@@ -319,7 +308,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "CobaltStrike_Beacon",
-            description: "Signatures Cobalt Strike Beacon",
+            description: txt!("Signatures Cobalt Strike Beacon"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("beacon.dll")),
@@ -329,7 +318,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "Common_RAT_Strings",
-            description: "Signatures de RATs courants (njRAT, AsyncRAT, QuasarRAT, Remcos)",
+            description: txt!("Signatures de RATs courants (njRAT, AsyncRAT, QuasarRAT, Remcos)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("njrat")),
@@ -342,7 +331,7 @@ fn build_rules() -> Vec<Rule> {
         },
         Rule {
             name: "CryptoMiner_Strings",
-            description: "Mineur de cryptomonnaie embarqué",
+            description: txt!("Mineur de cryptomonnaie embarqué"),
             severity: Severity::High,
             patterns: vec![
                 ps(sig!("stratum+tcp://")),
@@ -355,7 +344,7 @@ fn build_rules() -> Vec<Rule> {
         // ── UAC bypass ────────────────────────────────────────────────────────
         Rule {
             name: "UAC_Bypass_Techniques",
-            description: "Bypass UAC connu (fodhelper, eventvwr, sdclt, computerdefaults, silentcleanup)",
+            description: txt!("Bypass UAC connu (fodhelper, eventvwr, sdclt, computerdefaults, silentcleanup)"),
             severity: Severity::High,
             patterns: vec![
                 ps(sig!("fodhelper.exe")),
@@ -368,7 +357,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Macros Office ─────────────────────────────────────────────────────
         Rule {
             name: "Office_Macro_AutoExec",
-            description: "Macro Office à exécution automatique (AutoOpen, Workbook_Open)",
+            description: txt!("Macro Office à exécution automatique (AutoOpen, Workbook_Open)"),
             severity: Severity::High,
             patterns: vec![
                 ps(sig!("autoopen")),
@@ -381,7 +370,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Loaders / droppers connus ─────────────────────────────────────────
         Rule {
             name: "Malware_Loader_Families",
-            description: "Loaders/droppers connus (Emotet, QakBot, IcedID, Bumblebee, Gozi)",
+            description: txt!("Loaders/droppers connus (Emotet, QakBot, IcedID, Bumblebee, Gozi)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("emotet")),
@@ -397,7 +386,7 @@ fn build_rules() -> Vec<Rule> {
         // ── APT / implants ciblés ─────────────────────────────────────────────
         Rule {
             name: "APT_Implant_Families",
-            description: "Implants APT connus (PlugX, Winnti, ShadowPad, Sakula, Gh0st RAT)",
+            description: txt!("Implants APT connus (PlugX, Winnti, ShadowPad, Sakula, Gh0st RAT)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("plugx")),
@@ -412,7 +401,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Macro Excel 4.0 (XLM) ─────────────────────────────────────────────
         Rule {
             name: "Office_XLM4_Macro",
-            description: "Macro Excel 4.0 (XLM) à primitives d'exécution (=EXEC/=CALL/=REGISTER)",
+            description: txt!("Macro Excel 4.0 (XLM) à primitives d'exécution (=EXEC/=CALL/=REGISTER)"),
             severity: Severity::High,
             patterns: vec![
                 ps(sig!("=exec(")),
@@ -424,7 +413,7 @@ fn build_rules() -> Vec<Rule> {
         // ── HTA embarqué ──────────────────────────────────────────────────────
         Rule {
             name: "HTA_Application",
-            description: "Application HTA (HTML Application) — vecteur d'exécution de script",
+            description: txt!("Application HTA (HTML Application) — vecteur d'exécution de script"),
             severity: Severity::High,
             patterns: vec![ps(sig!("<hta:application"))],
             require_all: false,
@@ -432,7 +421,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Credential dumping LSASS ──────────────────────────────────────────
         Rule {
             name: "LSASS_Credential_Dumping",
-            description: "Outils de dump LSASS sans ambiguïté (nanodump, dumpert, SafetyKatz, sekurlsa::minidump)",
+            description: txt!("Outils de dump LSASS sans ambiguïté (nanodump, dumpert, SafetyKatz, sekurlsa::minidump)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("nanodump")),
@@ -446,7 +435,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Packers additionnels (sections PE) ────────────────────────────────
         Rule {
             name: "Additional_Packers",
-            description: "Packers/protecteurs additionnels (Themida, Enigma, Obsidium)",
+            description: txt!("Packers/protecteurs additionnels (Themida, Enigma, Obsidium)"),
             severity: Severity::Medium,
             patterns: vec![
                 pb(sig_bytes!(b".themida")),
@@ -459,7 +448,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Loaders/droppers additionnels ─────────────────────────────────────
         Rule {
             name: "Loader_Families_2",
-            description: "Loaders récents (GuLoader, SmokeLoader, DBatLoader, PrivateLoader)",
+            description: txt!("Loaders récents (GuLoader, SmokeLoader, DBatLoader, PrivateLoader)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("guloader")),
@@ -473,7 +462,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Mouvement latéral (outils Impacket) ───────────────────────────────
         Rule {
             name: "Impacket_Lateral_Movement",
-            description: "Outils Impacket d'exécution distante (wmiexec, smbexec, psexec.py, atexec, dcomexec)",
+            description: txt!("Outils Impacket d'exécution distante (wmiexec, smbexec, psexec.py, atexec, dcomexec)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("wmiexec")),
@@ -488,7 +477,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Outils d'attaque Active Directory ─────────────────────────────────
         Rule {
             name: "AD_Attack_Tools",
-            description: "Outils offensifs Active Directory (Rubeus, Kerberoast, SharpHound, Certify)",
+            description: txt!("Outils offensifs Active Directory (Rubeus, Kerberoast, SharpHound, Certify)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("rubeus")),
@@ -503,7 +492,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Mineurs GPU (extension cryptominer) ───────────────────────────────
         Rule {
             name: "GPU_Miner_Binaries",
-            description: "Mineurs GPU connus (NBMiner, PhoenixMiner, lolMiner, T-Rex, GMiner, TeamRedMiner)",
+            description: txt!("Mineurs GPU connus (NBMiner, PhoenixMiner, lolMiner, T-Rex, GMiner, TeamRedMiner)"),
             severity: Severity::High,
             patterns: vec![
                 ps(sig!("nbminer")),
@@ -518,7 +507,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Frameworks C2 / post-exploitation additionnels ────────────────────
         Rule {
             name: "C2_PostEx_Frameworks",
-            description: "Frameworks C2 / post-exploitation (PoshC2, Covenant, Empire, Merlin, Villain)",
+            description: txt!("Frameworks C2 / post-exploitation (PoshC2, Covenant, Empire, Merlin, Villain)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("poshc2")),
@@ -533,7 +522,7 @@ fn build_rules() -> Vec<Rule> {
         // ── RATs additionnels (familles commerciales/crimeware) ───────────────
         Rule {
             name: "RAT_Families_2",
-            description: "RATs additionnels (Warzone/Ave Maria, NetWire, Orcus, VenomRAT, XWorm, DarkComet)",
+            description: txt!("RATs additionnels (Warzone/Ave Maria, NetWire, Orcus, VenomRAT, XWorm, DarkComet)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("warzone rat")),
@@ -549,7 +538,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Wipers (destruction de données) ───────────────────────────────────
         Rule {
             name: "Wiper_Families",
-            description: "Malwares destructifs (WhisperGate, HermeticWiper, CaddyWiper, KillDisk, Shamoon)",
+            description: txt!("Malwares destructifs (WhisperGate, HermeticWiper, CaddyWiper, KillDisk, Shamoon)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("whispergate")),
@@ -564,7 +553,7 @@ fn build_rules() -> Vec<Rule> {
         // ── Stealers modernes (crimeware 2023+) ───────────────────────────────
         Rule {
             name: "Stealer_Families_3",
-            description: "Infostealers récents (Rhadamanthys, StealC, Meduza, RisePro, Atomic/AMOS)",
+            description: txt!("Infostealers récents (Rhadamanthys, StealC, Meduza, RisePro, Atomic/AMOS)"),
             severity: Severity::Critical,
             patterns: vec![
                 ps(sig!("rhadamanthys")),
@@ -654,6 +643,38 @@ mod tests {
     fn nom_de_famille_isole_toujours_detecte() {
         for s in ["\0koobmroF\0", " 2CammuL", "\"radiV\""] {
             assert!(rules(&rev(s)).contains(&"Stealer_Modern_Families".to_string()), "{s}");
+        }
+    }
+
+    #[test]
+    fn extension_doit_finir_le_mot() {
+        let ext = "Ransomware_Extensions".to_string();
+        assert!(!rules(&rev("tneitnoC.tnemetropmoc")).contains(&ext));
+        assert!(rules(&rev("\0itnoc.txt.erutcaf")).contains(&ext));
+    }
+
+    /// Anti-régression : l'exe livré ne contient aucun motif de détection en clair (sinon
+    /// FileScanner se classe lui-même malveillant ; LLVM y repliait même des constantes,
+    /// « mimikatz » ressortait en clair). Vérifie l'exe release s'il a été construit : le
+    /// binaire de test, lui, embarque des échantillons. Seule tolérée : Keylogger_Strings,
+    /// déclenchée par les VRAIS imports de WebView/tao.
+    #[test]
+    fn notre_binaire_ne_declenche_aucune_regle() {
+        let release = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target/release")
+            .join(if cfg!(windows) { "file-scanner.exe" } else { "file-scanner" });
+        let bins: Vec<_> = release.exists().then_some(release).into_iter().collect();
+        if bins.is_empty() {
+            eprintln!("exe release absent : construire avant de tester (cargo build --release)");
+        }
+        for bin in bins {
+            let hits: Vec<_> = YaraEngine::new()
+                .scan(&std::fs::read(&bin).unwrap())
+                .into_iter()
+                .filter(|m| m.rule_name != "Keylogger_Strings")
+                .map(|m| format!("{} {:?}", m.rule_name, m.matched_strings))
+                .collect();
+            assert!(hits.is_empty(), "{} : {hits:?}", bin.display());
         }
     }
 }

@@ -198,7 +198,7 @@ pub fn import(name: &str) -> Kb {
             "Utilisée par des frameworks d'E/S asynchrones et certains runtimes.",
             18,
         )
-    } else if has("VirtualAllocEx") {
+    } else if has(crate::txt!("VirtualAllocEx")) {
         kb(
             "Réserve de la mémoire dans un AUTRE programme.",
             "Prépare l'espace où sera injecté du code malveillant.",
@@ -226,7 +226,7 @@ pub fn import(name: &str) -> Kb {
             "Jeux vidéo et raccourcis clavier : extrêmement courant.",
             5,
         )
-    } else if has("URLDownloadToFile") {
+    } else if has(crate::txt!("URLDownloadToFile")) {
         kb(
             "Télécharge un fichier depuis Internet vers le disque.",
             "Les « droppers » récupèrent la charge malveillante.",
@@ -247,7 +247,7 @@ pub fn import(name: &str) -> Kb {
             "Gestionnaires de tâches, antivirus, outils de surveillance.",
             5,
         )
-    } else if has("IsDebuggerPresent") || has("CheckRemoteDebuggerPresent") || has("NtQueryInformationProcess") {
+    } else if has("IsDebuggerPresent") || has(crate::txt!("CheckRemoteDebuggerPresent")) || has("NtQueryInformationProcess") {
         kb(
             "Détecte si le programme est débogué.",
             "Anti-analyse : le malware se cache des chercheurs.",

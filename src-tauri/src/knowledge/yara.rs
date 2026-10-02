@@ -1,6 +1,7 @@
 //! Connaissance des règles de détection (YARA).
 
 use super::{kb, Kb};
+use crate::txt;
 
 // ─── Règles YARA ──────────────────────────────────────────────────────────────
 
@@ -29,7 +30,7 @@ pub fn yara_rule(rule: &str, matched: &[String]) -> Kb {
             28,
         ),
         "Additional_Packers" => kb(
-            "Le programme est protégé par un logiciel anti-analyse (VMProtect, Themida, Enigma…).",
+            txt!("Le programme est protégé par un logiciel anti-analyse (VMProtect, Themida, Enigma…)."),
             "Rend l'analyse très difficile : apprécié des malwares pour échapper aux chercheurs.",
             "Utilisé par des jeux, anti-triche et logiciels commerciaux contre le piratage.",
             30,
@@ -53,7 +54,7 @@ pub fn yara_rule(rule: &str, matched: &[String]) -> Kb {
             45,
         ),
         "Process_Injection" => kb(
-            "Le programme peut écrire du code dans un AUTRE programme puis l'y exécuter (VirtualAllocEx + CreateRemoteThread).",
+            txt!("Le programme peut écrire du code dans un AUTRE programme puis l'y exécuter (VirtualAllocEx + CreateRemoteThread)."),
             "Permet au malware de se cacher dans un processus de confiance (explorer.exe, navigateur).",
             "Débogueurs, anti-triche, outils d'accessibilité et certains lanceurs utilisent ces mêmes fonctions.",
             42,
@@ -77,7 +78,7 @@ pub fn yara_rule(rule: &str, matched: &[String]) -> Kb {
             18,
         ),
         "Mimikatz_Strings" | "LSASS_Credential_Dumping" => kb(
-            "Contient des marqueurs d'outils d'extraction de mots de passe Windows (Mimikatz, dump LSASS).",
+            txt!("Contient des marqueurs d'outils d'extraction de mots de passe Windows (Mimikatz, dump LSASS)."),
             "Vol des identifiants de tous les utilisateurs connectés.",
             "Outils d'audit de sécurité et documentation de pentest (usage professionnel encadré).",
             if n >= 2 { 88 } else { 72 },
@@ -97,7 +98,7 @@ pub fn yara_rule(rule: &str, matched: &[String]) -> Kb {
         "CryptoMiner_Strings" | "GPU_Miner_Binaries" => kb(
             "Contient des marqueurs de logiciel de minage de cryptomonnaie.",
             "Un mineur caché utilise votre processeur/carte graphique à votre insu.",
-            "Si VOUS avez téléchargé un mineur (XMRig, lolMiner…) volontairement, c'est normal.",
+            txt!("Si VOUS avez téléchargé un mineur (XMRig, lolMiner…) volontairement, c'est normal."),
             if m("stratum+tcp") { 55 } else { 40 },
         ),
         "PHP_Webshell" => kb(
@@ -113,7 +114,7 @@ pub fn yara_rule(rule: &str, matched: &[String]) -> Kb {
             82,
         ),
         "Network_Downloader" => kb(
-            "Utilise URLDownloadToFile pour télécharger un fichier.",
+            txt!("Utilise URLDownloadToFile pour télécharger un fichier."),
             "Les « droppers » téléchargent la vraie charge malveillante avec cette fonction.",
             "Mises à jour automatiques, installeurs web, lanceurs de jeux.",
             18,
@@ -137,7 +138,7 @@ pub fn yara_rule(rule: &str, matched: &[String]) -> Kb {
             65,
         ),
         "PowerShell_Encoded_Cmd" => kb(
-            "Lance PowerShell avec une commande encodée en Base64 (-EncodedCommand).",
+            txt!("Lance PowerShell avec une commande encodée en Base64 (-EncodedCommand)."),
             "Masque la commande réellement exécutée.",
             "Des outils de gestion (SCCM, Intune) encodent aussi leurs commandes pour éviter les problèmes de guillemets.",
             45,
@@ -155,9 +156,9 @@ pub fn yara_rule(rule: &str, matched: &[String]) -> Kb {
             12,
         ),
         "Stealer_Modern_Families" | "Stealer_Families_3" => kb(
-            "Contient le nom d'un voleur d'informations connu (RedLine, Lumma, Vidar…).",
+            txt!("Contient le nom d'un voleur d'informations connu (RedLine, Lumma, Vidar…)."),
             "Ces malwares volent mots de passe, cookies et portefeuilles.",
-            "Les noms courts (« vidar », « lumma ») peuvent apparaître par hasard dans un texte ou un nom propre.",
+            txt!("Les noms courts (« vidar », « lumma ») peuvent apparaître par hasard dans un texte ou un nom propre."),
             if n >= 2 { 70 } else { 40 },
         ),
         "Discord_Webhook_Exfil" => kb(
@@ -169,7 +170,7 @@ pub fn yara_rule(rule: &str, matched: &[String]) -> Kb {
         "UAC_Bypass_Techniques" => kb(
             "Fait référence à des programmes Windows détournables pour obtenir les droits administrateur sans confirmation.",
             "Élévation de privilèges silencieuse.",
-            "Ces noms (eventvwr.exe, sdclt.exe…) sont aussi cités par des outils système et de diagnostic.",
+            txt!("Ces noms (eventvwr.exe, sdclt.exe…) sont aussi cités par des outils système et de diagnostic."),
             35,
         ),
         "Office_Macro_AutoExec" => kb(
@@ -191,13 +192,13 @@ pub fn yara_rule(rule: &str, matched: &[String]) -> Kb {
             45,
         ),
         "Malware_Loader_Families" | "Loader_Families_2" => kb(
-            "Contient le nom d'un « loader » malveillant connu (Emotet, QakBot, GuLoader…).",
+            txt!("Contient le nom d'un « loader » malveillant connu (Emotet, QakBot, GuLoader…)."),
             "Un loader installe d'autres malwares (rançongiciels, voleurs).",
-            "Des noms courts (« gozi », « qbot ») peuvent apparaître dans un rapport ou une liste de détection.",
+            txt!("Des noms courts (« gozi », « qbot ») peuvent apparaître dans un rapport ou une liste de détection."),
             if n >= 2 { 72 } else { 45 },
         ),
         "Impacket_Lateral_Movement" | "AD_Attack_Tools" => kb(
-            "Fait référence à des outils d'attaque de réseau d'entreprise (Impacket, Rubeus, SharpHound…).",
+            txt!("Fait référence à des outils d'attaque de réseau d'entreprise (Impacket, Rubeus, SharpHound…)."),
             "Propagation dans le réseau et vol d'identifiants Active Directory.",
             "Outils de pentest et d'audit utilisés par les équipes sécurité.",
             if n >= 2 { 65 } else { 45 },
